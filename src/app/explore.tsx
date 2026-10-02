@@ -1,180 +1,492 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { router } from 'expo-router';
 
-import { ExternalLink } from '@/components/external-link';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Collapsible } from '@/components/ui/collapsible';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { supabase } from '@/services/supabase';
 
-export default function TabTwoScreen() {
-  const safeAreaInsets = useSafeAreaInsets();
-  const insets = {
-    ...safeAreaInsets,
-    bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
+type Trip = {
+  id: string;
+  name: string;
+  destination: string;
+  start_date: string;
+  end_date: string;
+  created_by: string;
+};
+
+export default function ExploreScreen() {
+  const [search, setSearch] = useState('');
+  const [selectedDestination, setSelectedDestination] = useState('');
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const popularDestinations = [
+    'Shillong',
+    'Guwahati',
+    'Delhi',
+    'Goa',
+    'Mumbai',
+    'Kolkata',
+  ];
+
+  useEffect(() => {
+    if (selectedDestination) {
+      loadTrips(selectedDestination);
+    }
+  }, [selectedDestination]);
+
+  const loadTrips = async (destination: string) => {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from('trips')
+      .select(
+        'id, name, destination, start_date, end_date, created_by'
+      )
+      .ilike('destination', `%${destination}%`)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.log('Error loading trips:', error.message);
+      setTrips([]);
+    } else {
+      setTrips(data ?? []);
+    }
+
+    setLoading(false);
   };
-  const theme = useTheme();
 
-  const contentPlatformStyle = Platform.select({
-    android: {
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
-      paddingBottom: insets.bottom,
-    },
-    web: {
-      paddingTop: Spacing.six,
-      paddingBottom: Spacing.four,
-    },
-  });
+  const handleSearch = () => {
+    const destination = search.trim();
+
+    if (!destination) {
+      return;
+    }
+
+    setSelectedDestination(destination);
+  };
+
+  const selectDestination = (destination: string) => {
+    setSearch(destination);
+    setSelectedDestination(destination);
+  };
+
+  const clearSearch = () => {
+    setSearch('');
+    setSelectedDestination('');
+    setTrips([]);
+  };
 
   return (
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentInset={insets}
-      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="subtitle">Explore</ThemedText>
-          <ThemedText style={styles.centerText} themeColor="textSecondary">
-            This starter app includes example{'\n'}code to help you get started.
-          </ThemedText>
+    <View style={styles.container}>
+      <Text style={styles.title}>Explore Trips</Text>
 
-          <ExternalLink href="https://docs.expo.dev" asChild>
-            <Pressable style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundElement" style={styles.linkButton}>
-                <ThemedText type="link">Expo documentation</ThemedText>
-                <SymbolView
-                  tintColor={theme.text}
-                  name={{ ios: 'arrow.up.right.square', android: 'link', web: 'link' }}
-                  size={12}
-                />
-              </ThemedView>
-            </Pressable>
-          </ExternalLink>
-        </ThemedView>
+      <Text style={styles.subtitle}>
+        Find travelers going to the same destination.
+      </Text>
 
-        <ThemedView style={styles.sectionsWrapper}>
-          <Collapsible title="File-based routing">
-            <ThemedText type="small">
-              This app has two screens: <ThemedText type="code">src/app/index.tsx</ThemedText> and{' '}
-              <ThemedText type="code">src/app/explore.tsx</ThemedText>
-            </ThemedText>
-            <ThemedText type="small">
-              The layout file in <ThemedText type="code">src/app/_layout.tsx</ThemedText> sets up
-              the tab navigator.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/router/introduction">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+      {/* Search */}
+      <View style={styles.searchRow}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Where are you going?"
+          placeholderTextColor="#9CA3AF"
+          value={search}
+          onChangeText={setSearch}
+          onSubmitEditing={handleSearch}
+          returnKeyType="search"
+        />
 
-          <Collapsible title="Android, iOS, and web support">
-            <ThemedView type="backgroundElement" style={styles.collapsibleContent}>
-              <ThemedText type="small">
-                You can open this project on Android, iOS, and the web. To open the web version,
-                press <ThemedText type="smallBold">w</ThemedText> in the terminal running this
-                project.
-              </ThemedText>
-              <Image
-                source={require('@/assets/images/tutorial-web.png')}
-                style={styles.imageTutorial}
-              />
-            </ThemedView>
-          </Collapsible>
+        <TouchableOpacity
+          style={styles.searchButton}
+          onPress={handleSearch}
+        >
+          <Text style={styles.searchButtonText}>Search</Text>
+        </TouchableOpacity>
+      </View>
 
-          <Collapsible title="Images">
-            <ThemedText type="small">
-              For static images, you can use the <ThemedText type="code">@2x</ThemedText> and{' '}
-              <ThemedText type="code">@3x</ThemedText> suffixes to provide files for different
-              screen densities.
-            </ThemedText>
-            <Image source={require('@/assets/images/react-logo.png')} style={styles.imageReact} />
-            <ExternalLink href="https://reactnative.dev/docs/images">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+      {/* Destination suggestions */}
+      {!selectedDestination && (
+        <>
+          <Text style={styles.sectionTitle}>
+            Popular Destinations
+          </Text>
 
-          <Collapsible title="Light and dark mode components">
-            <ThemedText type="small">
-              This template has light and dark mode support. The{' '}
-              <ThemedText type="code">useColorScheme()</ThemedText> hook lets you inspect what the
-              user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+          <View style={styles.destinationGrid}>
+            {popularDestinations.map((destination) => (
+              <TouchableOpacity
+                key={destination}
+                style={styles.destinationCard}
+                onPress={() => selectDestination(destination)}
+              >
+                <Text style={styles.destinationIcon}>📍</Text>
 
-          <Collapsible title="Animations">
-            <ThemedText type="small">
-              This template includes an example of an animated component. The{' '}
-              <ThemedText type="code">src/components/ui/collapsible.tsx</ThemedText> component uses
-              the powerful <ThemedText type="code">react-native-reanimated</ThemedText> library to
-              animate opening this hint.
-            </ThemedText>
-          </Collapsible>
-        </ThemedView>
-        {Platform.OS === 'web' && <WebBadge />}
-      </ThemedView>
-    </ScrollView>
+                <Text style={styles.destinationName}>
+                  {destination}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
+
+      {/* Selected destination */}
+      {selectedDestination && (
+        <View style={styles.resultsContainer}>
+          <View style={styles.resultsHeader}>
+            <View>
+              <Text style={styles.resultsLabel}>
+                TRIPS GOING TO
+              </Text>
+
+              <Text style={styles.resultsTitle}>
+                {selectedDestination}
+              </Text>
+            </View>
+
+            <TouchableOpacity onPress={clearSearch}>
+              <Text style={styles.clearText}>Clear</Text>
+            </TouchableOpacity>
+          </View>
+
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" />
+
+              <Text style={styles.loadingText}>
+                Finding trips...
+              </Text>
+            </View>
+          ) : trips.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyIcon}>🧭</Text>
+
+              <Text style={styles.emptyTitle}>
+                No trips found
+              </Text>
+
+              <Text style={styles.emptyText}>
+                There are no trips going to {selectedDestination}{' '}
+                yet.
+              </Text>
+
+              <Text style={styles.emptyHint}>
+                Try searching for another destination.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={trips}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.list}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.tripCard}
+                  onPress={() =>
+                    router.push(
+                      `/trip-details?tripId=${item.id}`
+                    )
+                  }
+                >
+                  <View style={styles.tripHeader}>
+                    <View style={styles.locationCircle}>
+                      <Text style={styles.locationIcon}>
+                        📍
+                      </Text>
+                    </View>
+
+                    <View style={styles.tripInfo}>
+                      <Text style={styles.tripName}>
+                        {item.name}
+                      </Text>
+
+                      <Text style={styles.tripDestination}>
+                        {item.destination}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.divider} />
+
+                  <View style={styles.dateRow}>
+                    <View>
+                      <Text style={styles.dateLabel}>
+                        START
+                      </Text>
+
+                      <Text style={styles.dateValue}>
+                        {item.start_date}
+                      </Text>
+                    </View>
+
+                    <View>
+                      <Text style={styles.dateLabel}>
+                        END
+                      </Text>
+
+                      <Text style={styles.dateValue}>
+                        {item.end_date}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.viewTrip}>
+                    View Trip →
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          )}
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F7FA',
+    padding: 24,
+  },
+
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#111827',
+  },
+
+  subtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 6,
+    marginBottom: 22,
+  },
+
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 28,
+  },
+
+  searchInput: {
+    flex: 1,
+    height: 50,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    color: '#111827',
+  },
+
+  searchButton: {
+    height: 50,
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginLeft: 8,
+  },
+
+  searchButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
+  sectionTitle: {
+    fontSize: 19,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 14,
+  },
+
+  destinationGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+
+  destinationCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 18,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+  },
+
+  destinationIcon: {
+    fontSize: 25,
+    marginBottom: 8,
+  },
+
+  destinationName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+  },
+
+  resultsContainer: {
     flex: 1,
   },
-  contentContainer: {
+
+  resultsHeader: {
     flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  container: {
-    maxWidth: MaxContentWidth,
-    flexGrow: 1,
-  },
-  titleContainer: {
-    gap: Spacing.three,
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
+    marginBottom: 18,
   },
-  centerText: {
+
+  resultsLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#9CA3AF',
+  },
+
+  resultsTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: 3,
+  },
+
+  clearText: {
+    color: '#2563EB',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  loadingContainer: {
+    alignItems: 'center',
+    marginTop: 60,
+  },
+
+  loadingText: {
+    color: '#6B7280',
+    marginTop: 10,
+  },
+
+  list: {
+    paddingBottom: 30,
+  },
+
+  tripCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+
+  tripHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  locationCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  locationIcon: {
+    fontSize: 22,
+  },
+
+  tripInfo: {
+    flex: 1,
+    marginLeft: 14,
+  },
+
+  tripName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+
+  tripDestination: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 16,
+  },
+
+  dateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+
+  dateLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#9CA3AF',
+  },
+
+  dateValue: {
+    fontSize: 14,
+    color: '#374151',
+    marginTop: 4,
+  },
+
+  viewTrip: {
+    color: '#2563EB',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 16,
+  },
+
+  emptyContainer: {
+    alignItems: 'center',
+    marginTop: 70,
+    paddingHorizontal: 20,
+  },
+
+  emptyIcon: {
+    fontSize: 50,
+  },
+
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: 12,
+  },
+
+  emptyText: {
+    fontSize: 14,
+    color: '#6B7280',
     textAlign: 'center',
+    marginTop: 7,
+    lineHeight: 20,
   },
-  pressed: {
-    opacity: 0.7,
-  },
-  linkButton: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
-    justifyContent: 'center',
-    gap: Spacing.one,
-    alignItems: 'center',
-  },
-  sectionsWrapper: {
-    gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
-  },
-  collapsibleContent: {
-    alignItems: 'center',
-  },
-  imageTutorial: {
-    width: '100%',
-    aspectRatio: 296 / 171,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.two,
-  },
-  imageReact: {
-    width: 100,
-    height: 100,
-    alignSelf: 'center',
+
+  emptyHint: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 8,
   },
 });
