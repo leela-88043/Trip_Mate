@@ -25,22 +25,62 @@ export default function ExploreScreen() {
   const [search, setSearch] = useState('');
   const [selectedDestination, setSelectedDestination] = useState('');
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [popularDestinations, setPopularDestinations] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingDestinations, setLoadingDestinations] = useState(true);
 
-  const popularDestinations = [
-    'Shillong',
-    'Guwahati',
-    'Delhi',
-    'Goa',
-    'Mumbai',
-    'Kolkata',
-  ];
+  useEffect(() => {
+    loadPopularDestinations();
+  }, []);
 
   useEffect(() => {
     if (selectedDestination) {
       loadTrips(selectedDestination);
     }
   }, [selectedDestination]);
+
+  const loadPopularDestinations = async () => {
+    setLoadingDestinations(true);
+
+    const { data, error } = await supabase
+      .from('trips')
+      .select('destination')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.log(
+        'Error loading destinations:',
+        error.message
+      );
+
+      setPopularDestinations([]);
+      setLoadingDestinations(false);
+      return;
+    }
+
+    const destinations = (data ?? [])
+      .map((item) => item.destination?.trim())
+      .filter(Boolean);
+
+    // Remove duplicate destinations
+    const uniqueDestinations = Array.from(
+      new Set(
+        destinations.map(
+          (destination) => destination.toLowerCase()
+        )
+      )
+    ).map((lowercaseDestination) => {
+      const original = destinations.find(
+        (destination) =>
+          destination.toLowerCase() === lowercaseDestination
+      );
+
+      return original ?? lowercaseDestination;
+    });
+
+    setPopularDestinations(uniqueDestinations.slice(0, 6));
+    setLoadingDestinations(false);
+  };
 
   const loadTrips = async (destination: string) => {
     setLoading(true);
@@ -54,7 +94,11 @@ export default function ExploreScreen() {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.log('Error loading trips:', error.message);
+      console.log(
+        'Error loading trips:',
+        error.message
+      );
+
       setTrips([]);
     } else {
       setTrips(data ?? []);
@@ -82,11 +126,15 @@ export default function ExploreScreen() {
     setSearch('');
     setSelectedDestination('');
     setTrips([]);
+
+    loadPopularDestinations();
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Explore Trips</Text>
+      <Text style={styles.title}>
+        Explore Trips
+      </Text>
 
       <Text style={styles.subtitle}>
         Find travelers going to the same destination.
@@ -108,32 +156,64 @@ export default function ExploreScreen() {
           style={styles.searchButton}
           onPress={handleSearch}
         >
-          <Text style={styles.searchButtonText}>Search</Text>
+          <Text style={styles.searchButtonText}>
+            Search
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Destination suggestions */}
+      {/* Popular Destinations */}
       {!selectedDestination && (
         <>
           <Text style={styles.sectionTitle}>
             Popular Destinations
           </Text>
 
-          <View style={styles.destinationGrid}>
-            {popularDestinations.map((destination) => (
-              <TouchableOpacity
-                key={destination}
-                style={styles.destinationCard}
-                onPress={() => selectDestination(destination)}
-              >
-                <Text style={styles.destinationIcon}>📍</Text>
+          {loadingDestinations ? (
+            <View style={styles.destinationLoading}>
+              <ActivityIndicator size="small" />
 
-                <Text style={styles.destinationName}>
-                  {destination}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+              <Text style={styles.loadingText}>
+                Loading destinations...
+              </Text>
+            </View>
+          ) : popularDestinations.length === 0 ? (
+            <View style={styles.noDestinations}>
+              <Text style={styles.emptyIcon}>
+                🧭
+              </Text>
+
+              <Text style={styles.emptyTitle}>
+                No destinations yet
+              </Text>
+
+              <Text style={styles.emptyText}>
+                Create a trip to see destinations here.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.destinationGrid}>
+              {popularDestinations.map(
+                (destination) => (
+                  <TouchableOpacity
+                    key={destination}
+                    style={styles.destinationCard}
+                    onPress={() =>
+                      selectDestination(destination)
+                    }
+                  >
+                    <Text style={styles.destinationIcon}>
+                      📍
+                    </Text>
+
+                    <Text style={styles.destinationName}>
+                      {destination}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              )}
+            </View>
+          )}
         </>
       )}
 
@@ -152,7 +232,9 @@ export default function ExploreScreen() {
             </View>
 
             <TouchableOpacity onPress={clearSearch}>
-              <Text style={styles.clearText}>Clear</Text>
+              <Text style={styles.clearText}>
+                Clear
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -166,15 +248,17 @@ export default function ExploreScreen() {
             </View>
           ) : trips.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>🧭</Text>
+              <Text style={styles.emptyIcon}>
+                🧭
+              </Text>
 
               <Text style={styles.emptyTitle}>
                 No trips found
               </Text>
 
               <Text style={styles.emptyText}>
-                There are no trips going to {selectedDestination}{' '}
-                yet.
+                There are no trips going to{' '}
+                {selectedDestination} yet.
               </Text>
 
               <Text style={styles.emptyHint}>
@@ -310,6 +394,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
     marginBottom: 14,
+  },
+
+  destinationLoading: {
+    alignItems: 'center',
+    marginTop: 30,
   },
 
   destinationGrid: {
@@ -461,6 +550,12 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: 'center',
     marginTop: 70,
+    paddingHorizontal: 20,
+  },
+
+  noDestinations: {
+    alignItems: 'center',
+    marginTop: 50,
     paddingHorizontal: 20,
   },
 

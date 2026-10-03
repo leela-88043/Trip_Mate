@@ -7,7 +7,6 @@ export async function createTrip(
   endDate: string,
   userId: string
 ) {
-  // Create the trip
   const { data: trip, error: tripError } = await supabase
     .from('trips')
     .insert({
@@ -24,7 +23,6 @@ export async function createTrip(
     return { data: null, error: tripError };
   }
 
-  // Add creator as trip member
   const { error: memberError } = await supabase
     .from('trip_members')
     .insert({
@@ -38,4 +36,19 @@ export async function createTrip(
   }
 
   return { data: trip, error: null };
+}
+
+export async function deleteTrip(
+  tripId: string,
+  userId: string
+) {
+  const { data, error } = await supabase
+    .from('trips')
+    .delete()
+    .eq('id', tripId)
+    .eq('created_by', userId)
+    .select()
+    .maybeSingle();
+
+  return { data, error };
 }

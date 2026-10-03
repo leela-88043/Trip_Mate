@@ -11,6 +11,8 @@ import { router } from 'expo-router';
 
 import { supabase } from '@/services/supabase';
 import { getMyTrips } from '@/services/trips';
+import ProfileButton from '@/components/ProfileButton';
+import ProfilePanel from '@/components/ProfilePanel';
 
 type Trip = {
   id: string;
@@ -22,14 +24,18 @@ type Trip = {
 
 export default function HomeScreen() {
   const [fullName, setFullName] = useState('Traveler');
+  const [email, setEmail] = useState('');
   const [upcomingTrip, setUpcomingTrip] = useState<Trip | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileVisible, setProfileVisible] = useState(false);
 
   useEffect(() => {
     loadDashboard();
   }, []);
 
   const loadDashboard = async () => {
+    setLoading(true);
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -39,18 +45,43 @@ export default function HomeScreen() {
       return;
     }
 
-    // Get user's profile
-    const { data: profile } = await supabase
+    // Email always comes from the authenticated user
+    setEmail(user.email ?? '');
+
+    // Name from authentication metadata
+    const authName =
+      user.user_metadata?.full_name ??
+      user.user_metadata?.name ??
+      '';
+
+    // Get profile information from database
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('full_name')
+      .select('full_name, email')
       .eq('id', user.id)
       .maybeSingle();
 
+    console.log('Logged in user:', user);
+    console.log('Profile data:', profile);
+    console.log('Profile error:', profileError);
+
+    // Prefer database name, otherwise use auth metadata name
     if (profile?.full_name) {
       setFullName(profile.full_name);
+    } else if (authName) {
+      setFullName(authName);
+    } else {
+      setFullName('Traveler');
     }
 
-    // Get user's trips
+    // Prefer authenticated email
+    if (user.email) {
+      setEmail(user.email);
+    } else if (profile?.email) {
+      setEmail(profile.email);
+    }
+
+    // Load user's trips
     const { data } = await getMyTrips(user.id);
 
     const trips: Trip[] = (data ?? [])
@@ -59,6 +90,8 @@ export default function HomeScreen() {
 
     if (trips.length > 0) {
       setUpcomingTrip(trips[0]);
+    } else {
+      setUpcomingTrip(null);
     }
 
     setLoading(false);
@@ -68,197 +101,257 @@ export default function HomeScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" />
-        <Text style={styles.loadingText}>Loading Trip Mate...</Text>
+
+        <Text style={styles.loadingText}>
+          Loading Trip Mate...
+        </Text>
       </View>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Welcome back 👋</Text>
-          <Text style={styles.name}>{fullName}</Text>
-        </View>
+    <View style={styles.screen}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>
+              Welcome back 👋
+            </Text>
 
-        <View style={styles.profileCircle}>
-          <Text style={styles.profileText}>
-            {fullName.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-      </View>
-
-      {/* Upcoming Trip */}
-      <Text style={styles.sectionTitle}>Your Trip</Text>
-
-      {upcomingTrip ? (
-        <TouchableOpacity
-          style={styles.tripCard}
-          onPress={() =>
-            router.push(`/trip-details?tripId=${upcomingTrip.id}`)
-          }
-        >
-          <View style={styles.tripTop}>
-            <View style={styles.destinationIcon}>
-              <Text style={styles.destinationIconText}>📍</Text>
-            </View>
-
-            <View style={styles.tripInfo}>
-              <Text style={styles.tripName}>
-                {upcomingTrip.name}
-              </Text>
-
-              <Text style={styles.destination}>
-                {upcomingTrip.destination}
-              </Text>
-            </View>
+            <Text style={styles.name}>
+              {fullName}
+            </Text>
           </View>
 
-          <View style={styles.tripDivider} />
+          <ProfileButton
+            fullName={fullName}
+            onPress={() => setProfileVisible(true)}
+          />
+        </View>
 
-          <View style={styles.dateRow}>
-            <View>
-              <Text style={styles.dateLabel}>START</Text>
-              <Text style={styles.dateValue}>
-                {upcomingTrip.start_date}
-              </Text>
+        {/* Upcoming Trip */}
+        <Text style={styles.sectionTitle}>
+          Your Trip
+        </Text>
+
+        {upcomingTrip ? (
+          <TouchableOpacity
+            style={styles.tripCard}
+            onPress={() =>
+              router.push(
+                `/trip-details?tripId=${upcomingTrip.id}`
+              )
+            }
+          >
+            <View style={styles.tripTop}>
+              <View style={styles.destinationIcon}>
+                <Text style={styles.destinationIconText}>
+                  📍
+                </Text>
+              </View>
+
+              <View style={styles.tripInfo}>
+                <Text style={styles.tripName}>
+                  {upcomingTrip.name}
+                </Text>
+
+                <Text style={styles.destination}>
+                  {upcomingTrip.destination}
+                </Text>
+              </View>
             </View>
 
-            <View>
-              <Text style={styles.dateLabel}>END</Text>
-              <Text style={styles.dateValue}>
-                {upcomingTrip.end_date}
-              </Text>
+            <View style={styles.tripDivider} />
+
+            <View style={styles.dateRow}>
+              <View>
+                <Text style={styles.dateLabel}>
+                  START
+                </Text>
+
+                <Text style={styles.dateValue}>
+                  {upcomingTrip.start_date}
+                </Text>
+              </View>
+
+              <View>
+                <Text style={styles.dateLabel}>
+                  END
+                </Text>
+
+                <Text style={styles.dateValue}>
+                  {upcomingTrip.end_date}
+                </Text>
+              </View>
             </View>
+
+            <Text style={styles.viewTrip}>
+              View Trip →
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyIcon}>
+              🧳
+            </Text>
+
+            <Text style={styles.emptyTitle}>
+              No trips yet
+            </Text>
+
+            <Text style={styles.emptyText}>
+              Create your first trip and start planning your journey.
+            </Text>
           </View>
+        )}
 
-          <Text style={styles.viewTrip}>
-            View Trip →
-          </Text>
-        </TouchableOpacity>
-      ) : (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyIcon}>🧳</Text>
+        {/* Main Actions */}
+        <Text style={styles.sectionTitle}>
+          Trip Management
+        </Text>
 
-          <Text style={styles.emptyTitle}>
-            No trips yet
-          </Text>
+        <View style={styles.actionGrid}>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => router.push('/create-trip')}
+          >
+            <Text style={styles.actionIcon}>➕</Text>
 
-          <Text style={styles.emptyText}>
-            Create your first trip and start planning your journey.
-          </Text>
+            <Text style={styles.actionTitle}>
+              Create Trip
+            </Text>
+
+            <Text style={styles.actionSubtitle}>
+              Plan a new journey
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => router.push('/my-trips')}
+          >
+            <Text style={styles.actionIcon}>🗺️</Text>
+
+            <Text style={styles.actionTitle}>
+              My Trips
+            </Text>
+
+            <Text style={styles.actionSubtitle}>
+              View your trips
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => router.push('/explore')}
+          >
+            <Text style={styles.actionIcon}>🔎</Text>
+
+            <Text style={styles.actionTitle}>
+              Explore
+            </Text>
+
+            <Text style={styles.actionSubtitle}>
+              Discover trips
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => {}}
+          >
+            <Text style={styles.actionIcon}>🛡️</Text>
+
+            <Text style={styles.actionTitle}>
+              Safety
+            </Text>
+
+            <Text style={styles.actionSubtitle}>
+              Stay informed
+            </Text>
+          </TouchableOpacity>
         </View>
-      )}
 
-      {/* Main Actions */}
-      <Text style={styles.sectionTitle}>Trip Management</Text>
+        {/* Coming Features */}
+        <Text style={styles.sectionTitle}>
+          Trip Mate Features
+        </Text>
 
-      <View style={styles.actionGrid}>
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() => router.push('/create-trip')}
-        >
-          <Text style={styles.actionIcon}>➕</Text>
-          <Text style={styles.actionTitle}>Create Trip</Text>
-          <Text style={styles.actionSubtitle}>
-            Plan a new journey
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() => router.push('/my-trips')}
-        >
-          <Text style={styles.actionIcon}>🗺️</Text>
-          <Text style={styles.actionTitle}>My Trips</Text>
-          <Text style={styles.actionSubtitle}>
-            View your trips
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() => router.push('/explore')}
-        >
-          <Text style={styles.actionIcon}>🔎</Text>
-          <Text style={styles.actionTitle}>Explore</Text>
-          <Text style={styles.actionSubtitle}>
-            Discover trips
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() => {}}
-        >
-          <Text style={styles.actionIcon}>🛡️</Text>
-          <Text style={styles.actionTitle}>Safety</Text>
-          <Text style={styles.actionSubtitle}>
-            Stay informed
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Coming Features */}
-      <Text style={styles.sectionTitle}>Trip Mate Features</Text>
-
-      <View style={styles.featureCard}>
-        <Text style={styles.featureIcon}>👥</Text>
-
-        <View style={styles.featureContent}>
-          <Text style={styles.featureTitle}>
-            Travel Together
+        <View style={styles.featureCard}>
+          <Text style={styles.featureIcon}>
+            👥
           </Text>
 
-          <Text style={styles.featureText}>
-            Find people travelling to the same destination
-            and connect with your travel group.
-          </Text>
+          <View style={styles.featureContent}>
+            <Text style={styles.featureTitle}>
+              Travel Together
+            </Text>
+
+            <Text style={styles.featureText}>
+              Find people travelling to the same destination
+              and connect with your travel group.
+            </Text>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.featureCard}>
-        <Text style={styles.featureIcon}>📍</Text>
-
-        <View style={styles.featureContent}>
-          <Text style={styles.featureTitle}>
-            Live Group Tracking
+        <View style={styles.featureCard}>
+          <Text style={styles.featureIcon}>
+            📍
           </Text>
 
-          <Text style={styles.featureText}>
-            Stay connected with your trip members using
-            real-time location sharing.
-          </Text>
+          <View style={styles.featureContent}>
+            <Text style={styles.featureTitle}>
+              Live Group Tracking
+            </Text>
+
+            <Text style={styles.featureText}>
+              Stay connected with your trip members using
+              real-time location sharing.
+            </Text>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.featureCard}>
-        <Text style={styles.featureIcon}>⚠️</Text>
-
-        <View style={styles.featureContent}>
-          <Text style={styles.featureTitle}>
-            Route & Safety Alerts
+        <View style={styles.featureCard}>
+          <Text style={styles.featureIcon}>
+            ⚠️
           </Text>
 
-          <Text style={styles.featureText}>
-            Get important information about hazards,
-            route changes and temporary stays.
-          </Text>
+          <View style={styles.featureContent}>
+            <Text style={styles.featureTitle}>
+              Route & Safety Alerts
+            </Text>
+
+            <Text style={styles.featureText}>
+              Get important information about hazards,
+              route changes and temporary stays.
+            </Text>
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+
+      <ProfilePanel
+        visible={profileVisible}
+        fullName={fullName}
+        email={email}
+        onClose={() => setProfileVisible(false)}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
     backgroundColor: '#F5F7FA',
+  },
+
+  container: {
+    flex: 1,
   },
 
   content: {
@@ -282,7 +375,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 20,
   },
 
   greeting: {
@@ -295,21 +388,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
     marginTop: 4,
-  },
-
-  profileCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#2563EB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  profileText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '700',
   },
 
   sectionTitle: {

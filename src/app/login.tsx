@@ -20,39 +20,61 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
-      Alert.alert('Missing information', 'Please enter your email and password.');
+      Alert.alert(
+        'Missing information',
+        'Please enter your email and password.'
+      );
       return;
     }
 
     setLoading(true);
 
-    const { error } = await signIn(email.trim(), password);
+    const { error } = await signIn(
+      email.trim(),
+      password
+    );
 
     setLoading(false);
 
     if (error) {
-      Alert.alert('Login failed', error.message);
+      Alert.alert(
+        'Login failed',
+        error.message
+      );
       return;
     }
 
-    Alert.alert('Success', 'Login successful!');
+    // Login successful → go directly to dashboard
+    router.replace('/');
   };
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={
+        Platform.OS === 'ios'
+          ? 'padding'
+          : undefined
+      }
     >
       <View style={styles.content}>
-        <Text style={styles.logo}>TRIP MATE</Text>
+        <Text style={styles.logo}>
+          TRIP MATE
+        </Text>
 
-        <Text style={styles.title}>Welcome back 👋</Text>
+        <Text style={styles.title}>
+          Welcome back 👋
+        </Text>
+
         <Text style={styles.subtitle}>
           Login to continue your journey
         </Text>
 
         <View style={styles.form}>
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>
+            Email
+          </Text>
+
           <TextInput
             style={styles.input}
             placeholder="Enter your email"
@@ -63,7 +85,10 @@ export default function LoginScreen() {
             keyboardType="email-address"
           />
 
-          <Text style={styles.label}>Password</Text>
+          <Text style={styles.label}>
+            Password
+          </Text>
+
           <TextInput
             style={styles.input}
             placeholder="Enter your password"
@@ -79,14 +104,21 @@ export default function LoginScreen() {
             disabled={loading}
           >
             <Text style={styles.buttonText}>
-              {loading ? 'Logging in...' : 'Login'}
+              {loading
+                ? 'Logging in...'
+                : 'Login'}
             </Text>
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity onPress={() => router.push('/signup')}>
+        <TouchableOpacity
+          onPress={() => router.push('/signup')}
+        >
           <Text style={styles.signupText}>
-            Don't have an account? <Text style={styles.signupLink}>Sign Up</Text>
+            Don't have an account?{' '}
+            <Text style={styles.signupLink}>
+              Sign Up
+            </Text>
           </Text>
         </TouchableOpacity>
       </View>
@@ -99,11 +131,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F7FA',
   },
+
   content: {
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 28,
   },
+
   logo: {
     fontSize: 18,
     fontWeight: '800',
@@ -112,12 +146,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 35,
   },
+
   title: {
     fontSize: 30,
     fontWeight: '700',
     color: '#111827',
     textAlign: 'center',
   },
+
   subtitle: {
     fontSize: 15,
     color: '#6B7280',
@@ -125,9 +161,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 35,
   },
+
   form: {
     width: '100%',
   },
+
   label: {
     fontSize: 14,
     fontWeight: '600',
@@ -135,6 +173,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 14,
   },
+
   input: {
     height: 52,
     backgroundColor: '#FFFFFF',
@@ -145,6 +184,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#111827',
   },
+
   button: {
     height: 52,
     backgroundColor: '#2563EB',
@@ -153,20 +193,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 28,
   },
+
   buttonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
+
   signupText: {
     textAlign: 'center',
     color: '#6B7280',
     fontSize: 14,
     marginTop: 25,
   },
+
   signupLink: {
     color: '#2563EB',
     fontWeight: '700',
   },
 });
-
