@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -25,15 +26,28 @@ type Trip = {
   created_by: string;
 };
 
+type TripDestination = {
+  id: string;
+  trip_id: string;
+  name: string;
+  visited: boolean;
+};
+
 export default function TripDetailsScreen() {
   const { tripId } = useLocalSearchParams();
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [members, setMembers] = useState<any[]>([]);
+  const [destinations, setDestinations] = useState<
+    TripDestination[]
+  >([]);
+
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [removingMember, setRemovingMember] =
+    useState<string | null>(null);
+  const [updatingPlace, setUpdatingPlace] =
     useState<string | null>(null);
   const [currentUserId, setCurrentUserId] =
     useState('');
@@ -69,16 +83,10 @@ export default function TripDetailsScreen() {
       .maybeSingle();
 
     if (error) {
-      console.log(
-        'Trip error:',
-        error.message
-      );
-
       Alert.alert(
         'Trip Loading Error',
         error.message
       );
-
       setLoading(false);
       return;
     }
@@ -88,12 +96,35 @@ export default function TripDetailsScreen() {
         'Trip Not Found',
         'This trip could not be found.'
       );
-
       setLoading(false);
       return;
     }
 
     setTrip(data);
+
+    const {
+      data: destinationData,
+      error: destinationError,
+    } = await supabase
+      .from('trip_destinations')
+      .select(
+        'id, trip_id, name, visited'
+      )
+      .eq('trip_id', String(tripId))
+      .order('created_at', {
+        ascending: true,
+      });
+
+    if (destinationError) {
+      console.log(
+        'Destination error:',
+        destinationError.message
+      );
+    } else {
+      setDestinations(
+        destinationData ?? []
+      );
+    }
 
     const {
       data: memberData,
@@ -120,6 +151,42 @@ export default function TripDetailsScreen() {
     }
 
     setLoading(false);
+  };
+
+  const handleTogglePlace = async (
+    place: TripDestination
+  ) => {
+    setUpdatingPlace(place.id);
+
+    const newVisited = !place.visited;
+
+    const { error } = await supabase
+      .from('trip_destinations')
+      .update({
+        visited: newVisited,
+      })
+      .eq('id', place.id);
+
+    setUpdatingPlace(null);
+
+    if (error) {
+      Alert.alert(
+        'Update Failed',
+        error.message
+      );
+      return;
+    }
+
+    setDestinations((current) =>
+      current.map((item) =>
+        item.id === place.id
+          ? {
+              ...item,
+              visited: newVisited,
+            }
+          : item
+      )
+    );
   };
 
   const handleJoinTrip = async () => {
@@ -334,8 +401,16 @@ export default function TripDetailsScreen() {
   const isOwner =
     currentUserId === trip.created_by;
 
+  const visitedCount = destinations.filter(
+    (place) => place.visited
+  ).length;
+
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.scrollView}
+      contentContainerStyle={styles.container}
+      showsVerticalScrollIndicator={false}
+    >
       <Text style={styles.title}>
         Trip Details
       </Text>
@@ -425,6 +500,77 @@ export default function TripDetailsScreen() {
         </TouchableOpacity>
       )}
 
+      <View style={styles.placesHeader}>
+        <Text style={styles.placesTitle}>
+          Places to Visit
+        </Text>
+
+        <Text style={styles.placesProgress}>
+          {visitedCount} of {destinations.length}{' '}
+          completed
+        </Text>
+      </View>
+
+      {destinations.length === 0 ? (
+        <View style={styles.noPlacesCard}>
+          <Text style={styles.noPlacesTitle}>
+            No places added
+          </Text>
+
+          <Text style={styles.noPlacesText}>
+            No places to visit have been added
+            to this trip yet.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.placesCard}>
+          {destinations.map((place) => (
+            <TouchableOpacity
+              key={place.id}
+              style={styles.placeRow}
+              onPress={() =>
+                handleTogglePlace(place)
+              }
+              disabled={
+                updatingPlace === place.id
+              }
+              activeOpacity={0.7}
+            >
+              <View
+                style={[
+                  styles.checkbox,
+                  place.visited &&
+                    styles.checkboxVisited,
+                ]}
+              >
+                {place.visited && (
+                  <Text style={styles.checkmark}>
+                    ✓
+                  </Text>
+                )}
+              </View>
+
+              <Text
+                style={[
+                  styles.placeName,
+                  place.visited &&
+                    styles.placeNameVisited,
+                ]}
+              >
+                {place.name}
+              </Text>
+
+              {updatingPlace === place.id && (
+                <ActivityIndicator
+                  size="small"
+                  style={styles.placeLoader}
+                />
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       <Text style={styles.membersTitle}>
         Trip Members
       </Text>
@@ -498,15 +644,19 @@ export default function TripDetailsScreen() {
           );
         })
       )}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scrollView: {
     flex: 1,
     backgroundColor: '#F5F7FA',
+  },
+
+  container: {
     padding: 24,
+    paddingBottom: 40,
   },
 
   center: {
@@ -585,6 +735,96 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
+  placesHeader: {
+    marginTop: 30,
+    marginBottom: 12,
+  },
+
+  placesTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+  },
+
+  placesProgress: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+
+  placesCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+
+  placeRow: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+
+  checkbox: {
+    width: 25,
+    height: 25,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#9CA3AF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+
+  checkboxVisited: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+
+  checkmark: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  placeName: {
+    flex: 1,
+    fontSize: 16,
+    color: '#111827',
+  },
+
+  placeNameVisited: {
+    color: '#6B7280',
+    textDecorationLine: 'line-through',
+  },
+
+  placeLoader: {
+    marginLeft: 8,
+  },
+
+  noPlacesCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+
+  noPlacesTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+
+  noPlacesText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 5,
+  },
+
   membersTitle: {
     fontSize: 20,
     fontWeight: '700',
@@ -648,3 +888,4 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
 });
+

@@ -12,6 +12,12 @@ import { router } from 'expo-router';
 
 import { supabase } from '@/services/supabase';
 
+type TripDestination = {
+  id: string;
+  name: string;
+  visited: boolean;
+};
+
 type Trip = {
   id: string;
   name: string;
@@ -19,15 +25,19 @@ type Trip = {
   start_date: string;
   end_date: string;
   created_by: string;
+  destinations: TripDestination[];
 };
 
 export default function ExploreScreen() {
   const [search, setSearch] = useState('');
-  const [selectedDestination, setSelectedDestination] = useState('');
+  const [selectedDestination, setSelectedDestination] =
+    useState('');
   const [trips, setTrips] = useState<Trip[]>([]);
-  const [popularDestinations, setPopularDestinations] = useState<string[]>([]);
+  const [popularDestinations, setPopularDestinations] =
+    useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingDestinations, setLoadingDestinations] = useState(true);
+  const [loadingDestinations, setLoadingDestinations] =
+    useState(true);
 
   useEffect(() => {
     loadPopularDestinations();
@@ -45,7 +55,9 @@ export default function ExploreScreen() {
     const { data, error } = await supabase
       .from('trips')
       .select('destination')
-      .order('created_at', { ascending: false });
+      .order('created_at', {
+        ascending: false,
+      });
 
     if (error) {
       console.log(
@@ -62,27 +74,34 @@ export default function ExploreScreen() {
       .map((item) => item.destination?.trim())
       .filter(Boolean);
 
-    // Remove duplicate destinations
     const uniqueDestinations = Array.from(
       new Set(
         destinations.map(
-          (destination) => destination.toLowerCase()
+          (destination) =>
+            destination.toLowerCase()
         )
       )
     ).map((lowercaseDestination) => {
       const original = destinations.find(
         (destination) =>
-          destination.toLowerCase() === lowercaseDestination
+          destination.toLowerCase() ===
+          lowercaseDestination
       );
 
-      return original ?? lowercaseDestination;
+      return (
+        original ?? lowercaseDestination
+      );
     });
 
-    setPopularDestinations(uniqueDestinations.slice(0, 6));
+    setPopularDestinations(
+      uniqueDestinations.slice(0, 6)
+    );
     setLoadingDestinations(false);
   };
 
-  const loadTrips = async (destination: string) => {
+  const loadTrips = async (
+    destination: string
+  ) => {
     setLoading(true);
 
     const { data, error } = await supabase
@@ -90,8 +109,13 @@ export default function ExploreScreen() {
       .select(
         'id, name, destination, start_date, end_date, created_by'
       )
-      .ilike('destination', `%${destination}%`)
-      .order('created_at', { ascending: false });
+      .ilike(
+        'destination',
+        `%${destination}%`
+      )
+      .order('created_at', {
+        ascending: false,
+      });
 
     if (error) {
       console.log(
@@ -100,26 +124,70 @@ export default function ExploreScreen() {
       );
 
       setTrips([]);
-    } else {
-      setTrips(data ?? []);
+      setLoading(false);
+      return;
     }
+
+    const tripsWithDestinations =
+      await Promise.all(
+        (data ?? []).map(
+          async (trip) => {
+            const {
+              data: destinationData,
+              error: destinationError,
+            } = await supabase
+              .from('trip_destinations')
+              .select(
+                'id, name, visited'
+              )
+              .eq('trip_id', trip.id)
+              .order('created_at', {
+                ascending: true,
+              });
+
+            if (destinationError) {
+              console.log(
+                'Error loading trip places:',
+                destinationError.message
+              );
+            }
+
+            return {
+              ...trip,
+              destinations:
+                destinationData ?? [],
+            };
+          }
+        )
+      );
+
+    setTrips(
+      tripsWithDestinations
+    );
 
     setLoading(false);
   };
 
   const handleSearch = () => {
-    const destination = search.trim();
+    const destination =
+      search.trim();
 
     if (!destination) {
       return;
     }
 
-    setSelectedDestination(destination);
+    setSelectedDestination(
+      destination
+    );
   };
 
-  const selectDestination = (destination: string) => {
+  const selectDestination = (
+    destination: string
+  ) => {
     setSearch(destination);
-    setSelectedDestination(destination);
+    setSelectedDestination(
+      destination
+    );
   };
 
   const clearSearch = () => {
@@ -140,7 +208,6 @@ export default function ExploreScreen() {
         Find travelers going to the same destination.
       </Text>
 
-      {/* Search */}
       <View style={styles.searchRow}>
         <TextInput
           style={styles.searchInput}
@@ -162,7 +229,6 @@ export default function ExploreScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Popular Destinations */}
       {!selectedDestination && (
         <>
           <Text style={styles.sectionTitle}>
@@ -170,43 +236,77 @@ export default function ExploreScreen() {
           </Text>
 
           {loadingDestinations ? (
-            <View style={styles.destinationLoading}>
-              <ActivityIndicator size="small" />
+            <View
+              style={
+                styles.destinationLoading
+              }
+            >
+              <ActivityIndicator
+                size="small"
+              />
 
-              <Text style={styles.loadingText}>
+              <Text
+                style={
+                  styles.loadingText
+                }
+              >
                 Loading destinations...
               </Text>
             </View>
-          ) : popularDestinations.length === 0 ? (
-            <View style={styles.noDestinations}>
-              <Text style={styles.emptyIcon}>
+          ) : popularDestinations.length ===
+            0 ? (
+            <View
+              style={styles.noDestinations}
+            >
+              <Text
+                style={styles.emptyIcon}
+              >
                 🧭
               </Text>
 
-              <Text style={styles.emptyTitle}>
+              <Text
+                style={styles.emptyTitle}
+              >
                 No destinations yet
               </Text>
 
-              <Text style={styles.emptyText}>
-                Create a trip to see destinations here.
+              <Text
+                style={styles.emptyText}
+              >
+                Create a trip to see
+                destinations here.
               </Text>
             </View>
           ) : (
-            <View style={styles.destinationGrid}>
+            <View
+              style={styles.destinationGrid}
+            >
               {popularDestinations.map(
                 (destination) => (
                   <TouchableOpacity
                     key={destination}
-                    style={styles.destinationCard}
+                    style={
+                      styles.destinationCard
+                    }
                     onPress={() =>
-                      selectDestination(destination)
+                      selectDestination(
+                        destination
+                      )
                     }
                   >
-                    <Text style={styles.destinationIcon}>
+                    <Text
+                      style={
+                        styles.destinationIcon
+                      }
+                    >
                       📍
                     </Text>
 
-                    <Text style={styles.destinationName}>
+                    <Text
+                      style={
+                        styles.destinationName
+                      }
+                    >
                       {destination}
                     </Text>
                   </TouchableOpacity>
@@ -217,60 +317,94 @@ export default function ExploreScreen() {
         </>
       )}
 
-      {/* Selected destination */}
       {selectedDestination && (
         <View style={styles.resultsContainer}>
-          <View style={styles.resultsHeader}>
+          <View
+            style={styles.resultsHeader}
+          >
             <View>
-              <Text style={styles.resultsLabel}>
+              <Text
+                style={styles.resultsLabel}
+              >
                 TRIPS GOING TO
               </Text>
 
-              <Text style={styles.resultsTitle}>
+              <Text
+                style={styles.resultsTitle}
+              >
                 {selectedDestination}
               </Text>
             </View>
 
-            <TouchableOpacity onPress={clearSearch}>
-              <Text style={styles.clearText}>
+            <TouchableOpacity
+              onPress={clearSearch}
+            >
+              <Text
+                style={styles.clearText}
+              >
                 Clear
               </Text>
             </TouchableOpacity>
           </View>
 
           {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" />
+            <View
+              style={styles.loadingContainer}
+            >
+              <ActivityIndicator
+                size="large"
+              />
 
-              <Text style={styles.loadingText}>
+              <Text
+                style={
+                  styles.loadingText
+                }
+              >
                 Finding trips...
               </Text>
             </View>
           ) : trips.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>
+            <View
+              style={styles.emptyContainer}
+            >
+              <Text
+                style={styles.emptyIcon}
+              >
                 🧭
               </Text>
 
-              <Text style={styles.emptyTitle}>
+              <Text
+                style={styles.emptyTitle}
+              >
                 No trips found
               </Text>
 
-              <Text style={styles.emptyText}>
+              <Text
+                style={styles.emptyText}
+              >
                 There are no trips going to{' '}
                 {selectedDestination} yet.
               </Text>
 
-              <Text style={styles.emptyHint}>
-                Try searching for another destination.
+              <Text
+                style={styles.emptyHint}
+              >
+                Try searching for another
+                destination.
               </Text>
             </View>
           ) : (
             <FlatList
               data={trips}
-              keyExtractor={(item) => item.id}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.list}
+              keyExtractor={(item) =>
+                item.id
+              }
+              showsVerticalScrollIndicator={
+                false
+              }
+              contentContainerStyle={
+                styles.list
+              }
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.tripCard}
@@ -280,49 +414,153 @@ export default function ExploreScreen() {
                     )
                   }
                 >
-                  <View style={styles.tripHeader}>
-                    <View style={styles.locationCircle}>
-                      <Text style={styles.locationIcon}>
+                  <View
+                    style={styles.tripHeader}
+                  >
+                    <View
+                      style={
+                        styles.locationCircle
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.locationIcon
+                        }
+                      >
                         📍
                       </Text>
                     </View>
 
-                    <View style={styles.tripInfo}>
-                      <Text style={styles.tripName}>
+                    <View
+                      style={styles.tripInfo}
+                    >
+                      <Text
+                        style={styles.tripName}
+                      >
                         {item.name}
                       </Text>
 
-                      <Text style={styles.tripDestination}>
+                      <Text
+                        style={
+                          styles.tripDestination
+                        }
+                      >
                         {item.destination}
                       </Text>
                     </View>
                   </View>
 
-                  <View style={styles.divider} />
+                  <View
+                    style={styles.divider}
+                  />
 
-                  <View style={styles.dateRow}>
+                  <View
+                    style={styles.dateRow}
+                  >
                     <View>
-                      <Text style={styles.dateLabel}>
+                      <Text
+                        style={
+                          styles.dateLabel
+                        }
+                      >
                         START
                       </Text>
 
-                      <Text style={styles.dateValue}>
+                      <Text
+                        style={
+                          styles.dateValue
+                        }
+                      >
                         {item.start_date}
                       </Text>
                     </View>
 
                     <View>
-                      <Text style={styles.dateLabel}>
+                      <Text
+                        style={
+                          styles.dateLabel
+                        }
+                      >
                         END
                       </Text>
 
-                      <Text style={styles.dateValue}>
+                      <Text
+                        style={
+                          styles.dateValue
+                        }
+                      >
                         {item.end_date}
                       </Text>
                     </View>
                   </View>
 
-                  <Text style={styles.viewTrip}>
+                  <View
+                    style={
+                      styles.placesSection
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.placesTitle
+                      }
+                    >
+                      Places to Visit
+                    </Text>
+
+                    {item.destinations
+                      .length === 0 ? (
+                      <Text
+                        style={
+                          styles.noPlacesText
+                        }
+                      >
+                        No places added
+                      </Text>
+                    ) : (
+                      item.destinations.map(
+                        (place) => (
+                          <View
+                            key={place.id}
+                            style={
+                              styles.placeRow
+                            }
+                          >
+                            <View
+                              style={[
+                                styles.smallCheckbox,
+                                place.visited &&
+                                  styles.smallCheckboxVisited,
+                              ]}
+                            >
+                              {place.visited && (
+                                <Text
+                                  style={
+                                    styles.smallCheckmark
+                                  }
+                                >
+                                  ✓
+                                </Text>
+                              )}
+                            </View>
+
+                            <Text
+                              style={[
+                                styles.placeName,
+                                place.visited &&
+                                  styles.placeNameVisited,
+                              ]}
+                            >
+                              {place.name}
+                            </Text>
+                          </View>
+                        )
+                      )
+                    )}
+                  </View>
+
+                  <Text
+                    style={styles.viewTrip}
+                  >
                     View Trip →
                   </Text>
                 </TouchableOpacity>
@@ -540,6 +778,64 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  placesSection: {
+    marginTop: 18,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+
+  placesTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+
+  placeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 7,
+  },
+
+  smallCheckbox: {
+    width: 19,
+    height: 19,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#9CA3AF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 9,
+  },
+
+  smallCheckboxVisited: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+
+  smallCheckmark: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  placeName: {
+    flex: 1,
+    fontSize: 14,
+    color: '#374151',
+  },
+
+  placeNameVisited: {
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+  },
+
+  noPlacesText: {
+    fontSize: 13,
+    color: '#9CA3AF',
+  },
+
   viewTrip: {
     color: '#2563EB',
     fontSize: 14,
@@ -585,3 +881,4 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 });
+
