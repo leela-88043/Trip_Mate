@@ -271,118 +271,19 @@ export default function CreateTripScreen() {
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#F5F7FA',
-  },
-
-  container: {
-    padding: 24,
-    paddingBottom: 40,
-  },
-
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 30,
-  },
-
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginTop: 14,
-    marginBottom: 8,
-  },
-
-  input: {
-    height: 52,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: '#111827',
-  },
-
-  placesTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginTop: 28,
-    marginBottom: 5,
-  },
-
-  placesSubtitle: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginBottom: 12,
-  },
-
-  placeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-
-  placeInput: {
-    flex: 1,
-    height: 50,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: '#111827',
-  },
-
-  removeButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#FEE2E2',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-
-  removeButtonText: {
-    fontSize: 25,
-    color: '#DC2626',
-    lineHeight: 27,
-  },
-
-  addButton: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#2563EB',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-
-  addButtonText: {
-    color: '#2563EB',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-
-  button: {
-    height: 52,
-    backgroundColor: '#2563EB',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 30,
-  },
-
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  scrollView: { flex: 1, backgroundColor: '#08090D' },
+  container: { padding: 22, paddingTop: 28, paddingBottom: 48 },
+  title: { fontSize: 29, fontWeight: '800', color: '#F7F8FC', letterSpacing: -0.5, marginBottom: 10 },
+  label: { fontSize: 13, fontWeight: '700', color: '#D9DDE7', marginTop: 19, marginBottom: 9 },
+  input: { minHeight: 53, backgroundColor: '#151821', borderWidth: 1, borderColor: '#292E3B', borderRadius: 14, paddingHorizontal: 16, fontSize: 15, color: '#F7F8FC' },
+  placesTitle: { fontSize: 19, fontWeight: '800', color: '#F7F8FC', marginTop: 30, marginBottom: 6 },
+  placesSubtitle: { fontSize: 13, color: '#9299A8', marginBottom: 15, lineHeight: 19 },
+  placeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  placeInput: { flex: 1, minHeight: 51, backgroundColor: '#151821', borderWidth: 1, borderColor: '#292E3B', borderRadius: 14, paddingHorizontal: 15, fontSize: 15, color: '#F7F8FC' },
+  removeButton: { width: 43, height: 43, borderRadius: 14, backgroundColor: '#382027', justifyContent: 'center', alignItems: 'center', marginLeft: 9, borderWidth: 1, borderColor: '#59303A' },
+  removeButtonText: { fontSize: 25, color: '#FF7B86', lineHeight: 27 },
+  addButton: { minHeight: 49, borderWidth: 1, borderColor: '#4F8CFF', borderStyle: 'dashed', borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 5, backgroundColor: '#111A2B' },
+  addButtonText: { color: '#78A5FF', fontSize: 14, fontWeight: '750' },
+  button: { minHeight: 54, backgroundColor: '#4F8CFF', borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginTop: 30, shadowColor: '#4F8CFF', shadowOpacity: 0.2, shadowRadius: 12, elevation: 3 },
+  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
 });
