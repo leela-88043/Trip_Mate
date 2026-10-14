@@ -95,48 +95,12 @@ export default function MyTripsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F7FA',
-    padding: 24,
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 10,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 20,
-  },
-  empty: {
-    color: '#6B7280',
-    fontSize: 16,
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  tripName: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  destination: {
-    fontSize: 16,
-    color: '#374151',
-    marginBottom: 8,
-  },
-  date: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
+  container: { flex: 1, backgroundColor: '#08090D', padding: 22, paddingTop: 28 },
+  center: { flex: 1, backgroundColor: '#08090D', justifyContent: 'center', alignItems: 'center', gap: 12 },
+  title: { fontSize: 29, fontWeight: '800', color: '#F7F8FC', letterSpacing: -0.5, marginBottom: 22 },
+  empty: { color: '#A0A7B5', fontSize: 15, lineHeight: 22, backgroundColor: '#151821', borderColor: '#252A37', borderWidth: 1, borderRadius: 17, padding: 20 },
+  card: { backgroundColor: '#151821', borderRadius: 18, padding: 19, marginBottom: 14, borderWidth: 1, borderColor: '#252A37' },
+  tripName: { fontSize: 18, fontWeight: '800', color: '#F7F8FC', marginBottom: 9 },
+  destination: { fontSize: 14, color: '#AEB6C5', marginBottom: 9 },
+  date: { fontSize: 13, color: '#858D9D' },
 });
