@@ -574,311 +574,52 @@ export default function ExploreScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F7FA',
-    padding: 24,
-  },
-
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-  },
-
-  subtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginTop: 6,
-    marginBottom: 22,
-  },
-
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 28,
-  },
-
-  searchInput: {
-    flex: 1,
-    height: 50,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 15,
-    color: '#111827',
-  },
-
-  searchButton: {
-    height: 50,
-    backgroundColor: '#2563EB',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginLeft: 8,
-  },
-
-  searchButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-
-  sectionTitle: {
-    fontSize: 19,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 14,
-  },
-
-  destinationLoading: {
-    alignItems: 'center',
-    marginTop: 30,
-  },
-
-  destinationGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-
-  destinationCard: {
-    width: '48%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 15,
-    padding: 18,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    alignItems: 'center',
-  },
-
-  destinationIcon: {
-    fontSize: 25,
-    marginBottom: 8,
-  },
-
-  destinationName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
-  },
-
-  resultsContainer: {
-    flex: 1,
-  },
-
-  resultsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 18,
-  },
-
-  resultsLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#9CA3AF',
-  },
-
-  resultsTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#111827',
-    marginTop: 3,
-  },
-
-  clearText: {
-    color: '#2563EB',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-
-  loadingContainer: {
-    alignItems: 'center',
-    marginTop: 60,
-  },
-
-  loadingText: {
-    color: '#6B7280',
-    marginTop: 10,
-  },
-
-  list: {
-    paddingBottom: 30,
-  },
-
-  tripCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-
-  tripHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  locationCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  locationIcon: {
-    fontSize: 22,
-  },
-
-  tripInfo: {
-    flex: 1,
-    marginLeft: 14,
-  },
-
-  tripName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-  },
-
-  tripDestination: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginTop: 4,
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 16,
-  },
-
-  dateRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-
-  dateLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#9CA3AF',
-  },
-
-  dateValue: {
-    fontSize: 14,
-    color: '#374151',
-    marginTop: 4,
-  },
-
-  placesSection: {
-    marginTop: 18,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-
-  placesTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 8,
-  },
-
-  placeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 7,
-  },
-
-  smallCheckbox: {
-    width: 19,
-    height: 19,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    borderColor: '#9CA3AF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 9,
-  },
-
-  smallCheckboxVisited: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
-  },
-
-  smallCheckmark: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-
-  placeName: {
-    flex: 1,
-    fontSize: 14,
-    color: '#374151',
-  },
-
-  placeNameVisited: {
-    color: '#9CA3AF',
-    textDecorationLine: 'line-through',
-  },
-
-  noPlacesText: {
-    fontSize: 13,
-    color: '#9CA3AF',
-  },
-
-  viewTrip: {
-    color: '#2563EB',
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: 16,
-  },
-
-  emptyContainer: {
-    alignItems: 'center',
-    marginTop: 70,
-    paddingHorizontal: 20,
-  },
-
-  noDestinations: {
-    alignItems: 'center',
-    marginTop: 50,
-    paddingHorizontal: 20,
-  },
-
-  emptyIcon: {
-    fontSize: 50,
-  },
-
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
-    marginTop: 12,
-  },
-
-  emptyText: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginTop: 7,
-    lineHeight: 20,
-  },
-
-  emptyHint: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginTop: 8,
-  },
+  container: { flex: 1, backgroundColor: '#08090D', padding: 22, paddingTop: 28 },
+  title: { fontSize: 29, fontWeight: '800', color: '#F7F8FC', letterSpacing: -0.5 },
+  subtitle: { fontSize: 14, color: '#9299A8', marginTop: 7, marginBottom: 22, lineHeight: 20 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 28 },
+  searchInput: { flex: 1, height: 52, backgroundColor: '#151821', borderWidth: 1, borderColor: '#292E3B', borderRadius: 15, paddingHorizontal: 16, fontSize: 15, color: '#F7F8FC' },
+  searchButton: { height: 52, backgroundColor: '#4F8CFF', borderRadius: 15, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 17, marginLeft: 9 },
+  searchButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  sectionTitle: { fontSize: 18, fontWeight: '750', color: '#F7F8FC', marginBottom: 15 },
+  destinationLoading: { alignItems: 'center', marginTop: 30 },
+  destinationGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  destinationCard: { width: '48%', minHeight: 105, backgroundColor: '#151821', borderRadius: 17, padding: 17, marginBottom: 12, borderWidth: 1, borderColor: '#252A37', alignItems: 'flex-start', justifyContent: 'center' },
+  destinationIcon: { fontSize: 22, marginBottom: 9 },
+  destinationName: { fontSize: 15, fontWeight: '650', color: '#F0F2F8' },
+  resultsContainer: { flex: 1 },
+  resultsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+  resultsLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: '#858D9D' },
+  resultsTitle: { fontSize: 23, fontWeight: '800', color: '#F7F8FC', marginTop: 5 },
+  clearText: { color: '#6FA0FF', fontSize: 14, fontWeight: '700' },
+  loadingContainer: { alignItems: 'center', marginTop: 60 },
+  loadingText: { color: '#9299A8', marginTop: 10 },
+  list: { paddingBottom: 30 },
+  tripCard: { backgroundColor: '#151821', borderRadius: 18, padding: 18, marginBottom: 14, borderWidth: 1, borderColor: '#252A37' },
+  tripHeader: { flexDirection: 'row', alignItems: 'center' },
+  locationCircle: { width: 48, height: 48, borderRadius: 16, backgroundColor: '#202D49', justifyContent: 'center', alignItems: 'center' },
+  locationIcon: { fontSize: 21 },
+  tripInfo: { flex: 1, marginLeft: 13 },
+  tripName: { fontSize: 17, fontWeight: '750', color: '#F7F8FC' },
+  tripDestination: { fontSize: 13, color: '#9AA2B2', marginTop: 4 },
+  divider: { height: 1, backgroundColor: '#292E3B', marginVertical: 16 },
+  dateRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  dateLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1, color: '#858D9D' },
+  dateValue: { fontSize: 13, color: '#D7DBE5', marginTop: 5 },
+  placesSection: { marginTop: 18, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#292E3B' },
+  placesTitle: { fontSize: 14, fontWeight: '750', color: '#F0F2F8', marginBottom: 10 },
+  smallCheckbox: { width: 19, height: 19, borderRadius: 5, borderWidth: 1.5, borderColor: '#697386', justifyContent: 'center', alignItems: 'center', marginRight: 9 },
+  smallCheckboxVisited: { backgroundColor: '#4F8CFF', borderColor: '#4F8CFF' },
+  smallCheckmark: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  placeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 7 },
+  placeName: { flex: 1, fontSize: 13, color: '#D7DBE5' },
+  placeNameVisited: { color: '#777F90', textDecorationLine: 'line-through' },
+  noPlacesText: { fontSize: 13, color: '#858D9D' },
+  viewTrip: { color: '#75A2FF', fontSize: 14, fontWeight: '750', marginTop: 16 },
+  emptyContainer: { alignItems: 'center', marginTop: 65, paddingHorizontal: 20, backgroundColor: '#151821', borderRadius: 18, borderWidth: 1, borderColor: '#252A37', paddingVertical: 30 },
+  noDestinations: { alignItems: 'center', marginTop: 45, paddingHorizontal: 20, backgroundColor: '#151821', borderRadius: 18, borderWidth: 1, borderColor: '#252A37', paddingVertical: 28 },
+  emptyIcon: { fontSize: 42 },
+  emptyTitle: { fontSize: 19, fontWeight: '750', color: '#F7F8FC', marginTop: 12 },
+  emptyText: { fontSize: 14, color: '#A0A7B5', textAlign: 'center', marginTop: 7, lineHeight: 21 },
+  emptyHint: { fontSize: 13, color: '#858D9D', textAlign: 'center', marginTop: 8 },
 });
-
