@@ -139,7 +139,7 @@ export default function RootLayout() {
         <View style={styles.loadingOverlay}>
           <ActivityIndicator
             size="large"
-            color="#2563EB"
+            color="#4F8CFF"
           />
         </View>
       )}
