@@ -47,6 +47,7 @@ export default function TripTestScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#08090D',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -57,7 +58,7 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   button: {
-    backgroundColor: '#2563EB',
+    backgroundColor: '#4F8CFF',
     paddingHorizontal: 25,
     paddingVertical: 15,
     borderRadius: 10,
