@@ -274,7 +274,7 @@ Welcome back 👋 </Text>
 const styles = StyleSheet.create({
 screen: {
 flex: 1,
-backgroundColor: '#F5F7FA',
+backgroundColor: '#08090D',
 },
 
 container: {
@@ -290,12 +290,12 @@ loadingContainer: {
 flex: 1,
 justifyContent: 'center',
 alignItems: 'center',
-backgroundColor: '#F5F7FA',
+backgroundColor: '#08090D',
 },
 
 loadingText: {
 marginTop: 10,
-color: '#6B7280',
+color: '#9299A8',
 },
 
 header: {
@@ -307,31 +307,31 @@ marginBottom: 20,
 
 greeting: {
 fontSize: 15,
-color: '#6B7280',
+color: '#9299A8',
 },
 
 name: {
 fontSize: 26,
 fontWeight: '700',
-color: '#111827',
+color: '#F7F8FC',
 marginTop: 4,
 },
 
 sectionTitle: {
 fontSize: 20,
 fontWeight: '700',
-color: '#111827',
+color: '#F7F8FC',
 marginBottom: 14,
 marginTop: 8,
 },
 
 tripCard: {
-backgroundColor: '#FFFFFF',
+backgroundColor: '#151821',
 borderRadius: 18,
 padding: 20,
 marginBottom: 28,
 borderWidth: 1,
-borderColor: '#E5E7EB',
+borderColor: '#252A37',
 },
 
 tripTop: {
@@ -360,12 +360,12 @@ flex: 1,
 tripName: {
 fontSize: 19,
 fontWeight: '700',
-color: '#111827',
+color: '#F7F8FC',
 },
 
 destination: {
 fontSize: 15,
-color: '#6B7280',
+color: '#9299A8',
 marginTop: 4,
 },
 
@@ -383,30 +383,30 @@ justifyContent: 'space-between',
 dateLabel: {
 fontSize: 11,
 fontWeight: '700',
-color: '#9CA3AF',
+color: '#858D9D',
 },
 
 dateValue: {
 fontSize: 14,
-color: '#374151',
+color: '#D9DDE7',
 marginTop: 4,
 },
 
 viewTrip: {
-color: '#2563EB',
+color: '#4F8CFF',
 fontSize: 14,
 fontWeight: '700',
 marginTop: 18,
 },
 
 emptyCard: {
-backgroundColor: '#FFFFFF',
+backgroundColor: '#151821',
 borderRadius: 18,
 padding: 25,
 alignItems: 'center',
 marginBottom: 28,
 borderWidth: 1,
-borderColor: '#E5E7EB',
+borderColor: '#252A37',
 },
 
 emptyIcon: {
@@ -416,25 +416,25 @@ fontSize: 40,
 emptyTitle: {
 fontSize: 19,
 fontWeight: '700',
-color: '#111827',
+color: '#F7F8FC',
 marginTop: 10,
 },
 
 emptyText: {
 textAlign: 'center',
-color: '#6B7280',
+color: '#9299A8',
 marginTop: 6,
 lineHeight: 21,
 },
 
 featureCard: {
-backgroundColor: '#FFFFFF',
+backgroundColor: '#151821',
 borderRadius: 16,
 padding: 18,
 flexDirection: 'row',
 marginBottom: 12,
 borderWidth: 1,
-borderColor: '#E5E7EB',
+borderColor: '#252A37',
 },
 
 featureIcon: {
@@ -449,12 +449,12 @@ flex: 1,
 featureTitle: {
 fontSize: 16,
 fontWeight: '700',
-color: '#111827',
+color: '#F7F8FC',
 },
 
 featureText: {
 fontSize: 13,
-color: '#6B7280',
+color: '#9299A8',
 lineHeight: 19,
 marginTop: 5,
 },
