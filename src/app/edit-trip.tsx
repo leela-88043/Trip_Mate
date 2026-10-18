@@ -352,7 +352,7 @@ export default function EditTripScreen() {
         value={tripName}
         onChangeText={setTripName}
         placeholder="Enter trip name"
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor="#858D9D"
       />
 
       <Text style={styles.label}>
@@ -364,7 +364,7 @@ export default function EditTripScreen() {
         value={tripDestination}
         onChangeText={setTripDestination}
         placeholder="Enter destination"
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor="#858D9D"
       />
 
       <Text style={styles.label}>
@@ -376,7 +376,7 @@ export default function EditTripScreen() {
         value={start}
         onChangeText={setStart}
         placeholder="YYYY-MM-DD"
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor="#858D9D"
       />
 
       <Text style={styles.label}>
@@ -388,7 +388,7 @@ export default function EditTripScreen() {
         value={end}
         onChangeText={setEnd}
         placeholder="YYYY-MM-DD"
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor="#858D9D"
       />
 
       <Text style={styles.placesTitle}>
@@ -428,7 +428,7 @@ export default function EditTripScreen() {
                     )
                   }
                   placeholder={`Place ${index + 1}`}
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="#858D9D"
                 />
 
                 {place.visited && (
@@ -504,7 +504,7 @@ export default function EditTripScreen() {
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#08090D',
   },
 
   container: {
@@ -515,55 +515,55 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#111827',
+    color: '#F7F8FC',
     marginBottom: 25,
   },
 
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: '#D9DDE7',
     marginTop: 14,
     marginBottom: 8,
   },
 
   input: {
     height: 52,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#303646',
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: '#111827',
+    color: '#F7F8FC',
   },
 
   placesTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111827',
+    color: '#F7F8FC',
     marginTop: 28,
     marginBottom: 5,
   },
 
   placesSubtitle: {
     fontSize: 13,
-    color: '#6B7280',
+    color: '#9299A8',
     marginBottom: 12,
   },
 
   loadingPlaces: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#252A37',
   },
 
   loadingText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#9299A8',
     marginTop: 8,
   },
 
@@ -579,18 +579,18 @@ const styles = StyleSheet.create({
 
   placeInput: {
     height: 50,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#303646',
     borderRadius: 10,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: '#111827',
+    color: '#F7F8FC',
   },
 
   visitedText: {
     fontSize: 12,
-    color: '#2563EB',
+    color: '#4F8CFF',
     fontWeight: '600',
     marginTop: 4,
     marginLeft: 4,
@@ -600,7 +600,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: '#382027',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
@@ -608,14 +608,14 @@ const styles = StyleSheet.create({
 
   removeButtonText: {
     fontSize: 25,
-    color: '#DC2626',
+    color: '#FF7B86',
     lineHeight: 27,
   },
 
   addButton: {
     height: 48,
     borderWidth: 1,
-    borderColor: '#2563EB',
+    borderColor: '#4F8CFF',
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
@@ -623,7 +623,7 @@ const styles = StyleSheet.create({
   },
 
   addButtonText: {
-    color: '#2563EB',
+    color: '#4F8CFF',
     fontSize: 15,
     fontWeight: '700',
   },
@@ -645,9 +645,9 @@ const styles = StyleSheet.create({
 
   cancelButton: {
     height: 52,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#303646',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -655,7 +655,7 @@ const styles = StyleSheet.create({
   },
 
   cancelText: {
-    color: '#374151',
+    color: '#D9DDE7',
     fontSize: 16,
     fontWeight: '600',
   },
