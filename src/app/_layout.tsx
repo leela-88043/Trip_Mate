@@ -85,7 +85,15 @@ export default function RootLayout() {
 
   return (
     <View style={styles.container}>
-      <Stack screenOptions={{ headerShown: true }}>
+      <Stack
+          screenOptions={{
+            headerShown: true,
+            headerStyle: { backgroundColor: '#08090D' },
+            headerTintColor: '#F7F8FC',
+            headerTitleStyle: { color: '#F7F8FC', fontWeight: '700' },
+            contentStyle: { backgroundColor: '#08090D' },
+          }}
+        >
         <Stack.Screen
           name="welcome"
           options={{ headerShown: false }}
@@ -152,6 +160,6 @@ const styles = StyleSheet.create({
   bottom: 0,
   justifyContent: 'center',
   alignItems: 'center',
-  backgroundColor: '#F5F7FA',
+  backgroundColor: '#08090D',
 },
 });
