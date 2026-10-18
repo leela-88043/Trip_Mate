@@ -97,7 +97,7 @@ try {
 };
 
 if (loading) {
-return ( <View style={styles.loadingContainer}> <ActivityIndicator size="large" color="#2563EB" />
+return ( <View style={styles.loadingContainer}> <ActivityIndicator size="large" color="#4F8CFF" />
 
     <Text style={styles.loadingText}>
       Loading Trip Mate...
@@ -371,7 +371,7 @@ marginTop: 4,
 
 tripDivider: {
 height: 1,
-backgroundColor: '#E5E7EB',
+backgroundColor: '#252A37',
 marginVertical: 18,
 },
 
