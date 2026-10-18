@@ -7,16 +7,16 @@ return (
 <Tabs
 screenOptions={{
 headerShown: false,
-tabBarActiveTintColor: '#2563EB',
-tabBarInactiveTintColor: '#9CA3AF',
+tabBarActiveTintColor: '#4F8CFF',
+tabBarInactiveTintColor: '#858D9D',
 
     tabBarStyle: {
       height: 68,
       paddingTop: 8,
       paddingBottom: 8,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: '#151821',
       borderTopWidth: 1,
-      borderTopColor: '#E5E7EB',
+      borderTopColor: '#252A37',
     },
 
     tabBarLabelStyle: {
@@ -106,7 +106,7 @@ createButton: {
 width: 43,
 height: 43,
 borderRadius: 22,
-backgroundColor: '#2563EB',
+backgroundColor: '#4F8CFF',
 justifyContent: 'center',
 alignItems: 'center',
 },
