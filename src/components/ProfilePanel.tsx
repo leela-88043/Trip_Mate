@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
 
   panel: {
     width: PANEL_WIDTH,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     paddingTop: 50,
     paddingHorizontal: 22,
     paddingBottom: 30,
@@ -281,21 +281,21 @@ const styles = StyleSheet.create({
   panelTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#111827',
+    color: '#F7F8FC',
   },
 
   closeButton: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#1B202C',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
   closeText: {
     fontSize: 18,
-    color: '#374151',
+    color: '#D9DDE7',
   },
 
   userSection: {
@@ -322,12 +322,12 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111827',
+    color: '#F7F8FC',
   },
 
   email: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#9299A8',
     marginTop: 5,
     textAlign: 'center',
   },
@@ -354,12 +354,12 @@ const styles = StyleSheet.create({
   optionTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#111827',
+    color: '#F7F8FC',
   },
 
   optionSubtitle: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#9299A8',
     marginTop: 3,
   },
 
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
   logoutTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#DC2626',
+    color: '#FF7B86',
   },
 });
 
