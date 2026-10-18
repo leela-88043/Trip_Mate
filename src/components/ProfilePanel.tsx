@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     width: 76,
     height: 76,
     borderRadius: 38,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#4F8CFF',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
 
   divider: {
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#252A37',
     marginVertical: 12,
   },
 
