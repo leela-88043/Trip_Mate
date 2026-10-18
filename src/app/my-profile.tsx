@@ -160,7 +160,7 @@ export default function MyProfileScreen() {
             value={editName}
             onChangeText={setEditName}
             placeholder="Enter your name"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor="#858D9D"
             autoCapitalize="words"
           />
         ) : (
@@ -221,7 +221,7 @@ export default function MyProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#08090D',
     padding: 24,
   },
 
@@ -229,28 +229,28 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#08090D',
   },
 
   loadingText: {
     marginTop: 10,
-    color: '#6B7280',
+    color: '#9299A8',
   },
 
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#111827',
+    color: '#F7F8FC',
     marginBottom: 24,
   },
 
   profileCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     borderRadius: 16,
     padding: 28,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#252A37',
   },
 
   profileCircle: {
@@ -272,46 +272,46 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#111827',
+    color: '#F7F8FC',
   },
 
   email: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#9299A8',
     marginTop: 6,
   },
 
   infoCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     borderRadius: 16,
     padding: 20,
     marginTop: 18,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#252A37',
   },
 
   label: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#9CA3AF',
+    color: '#858D9D',
   },
 
   value: {
     fontSize: 16,
-    color: '#111827',
+    color: '#F7F8FC',
     marginTop: 6,
   },
 
   input: {
     height: 48,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#303646',
     borderRadius: 10,
     paddingHorizontal: 14,
     marginTop: 8,
     fontSize: 16,
-    color: '#111827',
-    backgroundColor: '#FFFFFF',
+    color: '#F7F8FC',
+    backgroundColor: '#151821',
   },
 
   divider: {
@@ -337,9 +337,9 @@ const styles = StyleSheet.create({
   cancelButton: {
     flex: 1,
     height: 52,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#303646',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
   },
 
   cancelText: {
-    color: '#374151',
+    color: '#D9DDE7',
     fontSize: 16,
     fontWeight: '600',
   },
