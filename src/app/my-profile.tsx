@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#4F8CFF',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 15,
@@ -316,13 +316,13 @@ const styles = StyleSheet.create({
 
   divider: {
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#252A37',
     marginVertical: 18,
   },
 
   editButton: {
     height: 52,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#4F8CFF',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
   saveButton: {
     flex: 1,
     height: 52,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#4F8CFF',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
