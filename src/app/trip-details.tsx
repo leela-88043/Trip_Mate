@@ -651,7 +651,7 @@ export default function TripDetailsScreen() {
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#08090D',
   },
 
   container: {
@@ -670,27 +670,27 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     marginBottom: 30,
-    color: '#111827',
+    color: '#F7F8FC',
   },
 
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#9299A8',
     marginTop: 15,
   },
 
   value: {
     fontSize: 18,
-    color: '#111827',
+    color: '#F7F8FC',
     marginTop: 5,
   },
 
   editButton: {
     height: 50,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     borderWidth: 1,
-    borderColor: '#2563EB',
+    borderColor: '#4F8CFF',
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
@@ -698,16 +698,16 @@ const styles = StyleSheet.create({
   },
 
   editButtonText: {
-    color: '#2563EB',
+    color: '#4F8CFF',
     fontSize: 16,
     fontWeight: '700',
   },
 
   deleteButton: {
     height: 50,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     borderWidth: 1,
-    borderColor: '#DC2626',
+    borderColor: '#59303A',
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
   },
 
   deleteButtonText: {
-    color: '#DC2626',
+    color: '#FF7B86',
     fontSize: 16,
     fontWeight: '700',
   },
@@ -743,21 +743,21 @@ const styles = StyleSheet.create({
   placesTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111827',
+    color: '#F7F8FC',
   },
 
   placesProgress: {
     fontSize: 13,
-    color: '#6B7280',
+    color: '#9299A8',
     marginTop: 4,
   },
 
   placesCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     borderRadius: 12,
     paddingHorizontal: 15,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#252A37',
   },
 
   placeRow: {
@@ -765,7 +765,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: '#252A37',
   },
 
   checkbox: {
@@ -773,7 +773,7 @@ const styles = StyleSheet.create({
     height: 25,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#9CA3AF',
+    borderColor: '#697386',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -781,7 +781,7 @@ const styles = StyleSheet.create({
 
   checkboxVisited: {
     backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
+    borderColor: '#4F8CFF',
   },
 
   checkmark: {
@@ -793,11 +793,11 @@ const styles = StyleSheet.create({
   placeName: {
     flex: 1,
     fontSize: 16,
-    color: '#111827',
+    color: '#F7F8FC',
   },
 
   placeNameVisited: {
-    color: '#6B7280',
+    color: '#9299A8',
     textDecorationLine: 'line-through',
   },
 
@@ -806,40 +806,40 @@ const styles = StyleSheet.create({
   },
 
   noPlacesCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     borderRadius: 12,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#252A37',
   },
 
   noPlacesTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: '#F7F8FC',
   },
 
   noPlacesText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#9299A8',
     marginTop: 5,
   },
 
   membersTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111827',
+    color: '#F7F8FC',
     marginTop: 30,
     marginBottom: 12,
   },
 
   memberCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     borderRadius: 12,
     padding: 15,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#252A37',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -853,39 +853,39 @@ const styles = StyleSheet.create({
   memberName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: '#F7F8FC',
   },
 
   memberEmail: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#9299A8',
     marginTop: 4,
   },
 
   memberRole: {
     fontSize: 14,
-    color: '#2563EB',
+    color: '#4F8CFF',
     marginTop: 4,
     fontWeight: '600',
   },
 
   removeButton: {
     borderWidth: 1,
-    borderColor: '#DC2626',
+    borderColor: '#59303A',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
 
   removeButtonText: {
-    color: '#DC2626',
+    color: '#FF7B86',
     fontSize: 13,
     fontWeight: '700',
   },
 
   noMembers: {
     fontSize: 15,
-    color: '#6B7280',
+    color: '#9299A8',
   },
 });
 
