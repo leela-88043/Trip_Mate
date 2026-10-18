@@ -78,7 +78,7 @@ export default function LoginScreen() {
           <TextInput
             style={styles.input}
             placeholder="Enter your email"
-            placeholderTextColor="#888"
+            placeholderTextColor="#858D9D"
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -92,7 +92,7 @@ export default function LoginScreen() {
           <TextInput
             style={styles.input}
             placeholder="Enter your password"
-            placeholderTextColor="#888"
+            placeholderTextColor="#858D9D"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -129,7 +129,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#08090D',
   },
 
   content: {
@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     letterSpacing: 2,
-    color: '#2563EB',
+    color: '#4F8CFF',
     textAlign: 'center',
     marginBottom: 35,
   },
@@ -150,13 +150,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 30,
     fontWeight: '700',
-    color: '#111827',
+    color: '#F7F8FC',
     textAlign: 'center',
   },
 
   subtitle: {
     fontSize: 15,
-    color: '#6B7280',
+    color: '#9299A8',
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 35,
@@ -169,20 +169,20 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: '#D9DDE7',
     marginBottom: 8,
     marginTop: 14,
   },
 
   input: {
     height: 52,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#303646',
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: '#111827',
+    color: '#F7F8FC',
   },
 
   button: {
@@ -202,13 +202,13 @@ const styles = StyleSheet.create({
 
   signupText: {
     textAlign: 'center',
-    color: '#6B7280',
+    color: '#9299A8',
     fontSize: 14,
     marginTop: 25,
   },
 
   signupLink: {
-    color: '#2563EB',
+    color: '#4F8CFF',
     fontWeight: '700',
   },
 });
