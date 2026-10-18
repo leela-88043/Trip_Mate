@@ -722,7 +722,7 @@ const styles = StyleSheet.create({
 
   joinButton: {
     height: 50,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#4F8CFF',
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
@@ -780,7 +780,7 @@ const styles = StyleSheet.create({
   },
 
   checkboxVisited: {
-    backgroundColor: '#2563EB',
+    backgroundColor: '#4F8CFF',
     borderColor: '#4F8CFF',
   },
 
