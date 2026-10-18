@@ -43,7 +43,7 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#08090D',
   },
 
   content: {
@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '900',
     letterSpacing: 3,
-    color: '#2563EB',
+    color: '#4F8CFF',
     marginBottom: 55,
   },
 
@@ -69,14 +69,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#111827',
+    color: '#F7F8FC',
     textAlign: 'center',
     lineHeight: 42,
   },
 
   subtitle: {
     fontSize: 15,
-    color: '#6B7280',
+    color: '#9299A8',
     textAlign: 'center',
     lineHeight: 24,
     marginTop: 18,
@@ -101,9 +101,9 @@ const styles = StyleSheet.create({
   signupButton: {
     width: '100%',
     height: 54,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#151821',
     borderWidth: 1.5,
-    borderColor: '#2563EB',
+    borderColor: '#4F8CFF',
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
@@ -111,13 +111,13 @@ const styles = StyleSheet.create({
   },
 
   signupButtonText: {
-    color: '#2563EB',
+    color: '#4F8CFF',
     fontSize: 17,
     fontWeight: '700',
   },
 
   footer: {
-    color: '#9CA3AF',
+    color: '#858D9D',
     fontSize: 12,
     marginTop: 45,
   },
