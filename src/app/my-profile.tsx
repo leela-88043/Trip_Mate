@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { router } from 'expo-router';
 
 import { supabase } from '@/services/supabase';
 
@@ -20,7 +22,7 @@ export default function MyProfileScreen() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    loadProfile();
+    void loadProfile();
   }, []);
 
   const loadProfile = async () => {
@@ -46,13 +48,7 @@ export default function MyProfileScreen() {
 
     setFullName(name);
     setEditName(name);
-
-    setEmail(
-      profile?.email ||
-      user.email ||
-      ''
-    );
-
+    setEmail(profile?.email || user.email || '');
     setLoading(false);
   };
 
@@ -60,10 +56,7 @@ export default function MyProfileScreen() {
     const newName = editName.trim();
 
     if (!newName) {
-      Alert.alert(
-        'Invalid name',
-        'Please enter your name.'
-      );
+      Alert.alert('Invalid name', 'Please enter your name.');
       return;
     }
 
@@ -72,10 +65,7 @@ export default function MyProfileScreen() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      Alert.alert(
-        'Error',
-        'User is not logged in.'
-      );
+      Alert.alert('Error', 'User is not logged in.');
       return;
     }
 
@@ -90,11 +80,7 @@ export default function MyProfileScreen() {
 
     if (error) {
       setSaving(false);
-
-      Alert.alert(
-        'Update failed',
-        error.message
-      );
+      Alert.alert('Update failed', error.message);
       return;
     }
 
@@ -109,16 +95,13 @@ export default function MyProfileScreen() {
     setEditing(false);
     setSaving(false);
 
-    Alert.alert(
-      'Success',
-      'Your profile has been updated.'
-    );
+    Alert.alert('Success', 'Your profile has been updated.');
   };
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color="#4F8CFF" />
 
         <Text style={styles.loadingText}>
           Loading profile...
@@ -128,10 +111,12 @@ export default function MyProfileScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>
-        My Profile
-      </Text>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+    >
+      <Text style={styles.title}>My Profile</Text>
 
       <View style={styles.profileCard}>
         <View style={styles.profileCircle}>
@@ -140,19 +125,12 @@ export default function MyProfileScreen() {
           </Text>
         </View>
 
-        <Text style={styles.name}>
-          {fullName}
-        </Text>
-
-        <Text style={styles.email}>
-          {email}
-        </Text>
+        <Text style={styles.name}>{fullName}</Text>
+        <Text style={styles.email}>{email}</Text>
       </View>
 
       <View style={styles.infoCard}>
-        <Text style={styles.label}>
-          FULL NAME
-        </Text>
+        <Text style={styles.label}>FULL NAME</Text>
 
         {editing ? (
           <TextInput
@@ -162,22 +140,16 @@ export default function MyProfileScreen() {
             placeholder="Enter your name"
             placeholderTextColor="#858D9D"
             autoCapitalize="words"
+            editable={!saving}
           />
         ) : (
-          <Text style={styles.value}>
-            {fullName}
-          </Text>
+          <Text style={styles.value}>{fullName}</Text>
         )}
 
         <View style={styles.divider} />
 
-        <Text style={styles.label}>
-          EMAIL
-        </Text>
-
-        <Text style={styles.value}>
-          {email}
-        </Text>
+        <Text style={styles.label}>EMAIL</Text>
+        <Text style={styles.value}>{email}</Text>
       </View>
 
       {!editing ? (
@@ -185,26 +157,26 @@ export default function MyProfileScreen() {
           style={styles.editButton}
           onPress={() => setEditing(true)}
         >
-          <Text style={styles.buttonText}>
-            Edit Profile
-          </Text>
+          <Text style={styles.buttonText}>Edit Profile</Text>
         </TouchableOpacity>
       ) : (
         <View style={styles.buttonRow}>
           <TouchableOpacity
             style={styles.cancelButton}
+            disabled={saving}
             onPress={() => {
               setEditName(fullName);
               setEditing(false);
             }}
           >
-            <Text style={styles.cancelText}>
-              Cancel
-            </Text>
+            <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.saveButton}
+            style={[
+              styles.saveButton,
+              saving && styles.disabledButton,
+            ]}
             onPress={handleSave}
             disabled={saving}
           >
@@ -214,7 +186,46 @@ export default function MyProfileScreen() {
           </TouchableOpacity>
         </View>
       )}
-    </View>
+
+      <TouchableOpacity
+        accessibilityRole="button"
+        style={styles.featureButton}
+        onPress={() => router.push('/companions')}
+        disabled={saving}
+      >
+        <View style={styles.featureText}>
+          <Text style={styles.featureTitle}>
+            Find Companions
+          </Text>
+
+          <Text style={styles.featureSubtitle}>
+            Discover travellers with similar interests and travel plans.
+          </Text>
+        </View>
+
+        <Text style={styles.arrow}>›</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        accessibilityRole="button"
+        style={styles.featureButton}
+        onPress={() => router.push('/travel-preferences')}
+        disabled={saving}
+      >
+        <View style={styles.featureText}>
+          <Text style={styles.featureTitle}>
+            Travel Preferences
+          </Text>
+
+          <Text style={styles.featureSubtitle}>
+            Manage your interests, destinations, budget, and companion
+            discovery.
+          </Text>
+        </View>
+
+        <Text style={styles.arrow}>›</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
@@ -222,7 +233,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#08090D',
+  },
+
+  content: {
     padding: 24,
+    paddingBottom: 60,
   },
 
   loadingContainer: {
@@ -356,6 +371,10 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
+  disabledButton: {
+    opacity: 0.6,
+  },
+
   buttonText: {
     color: '#FFFFFF',
     fontSize: 16,
@@ -366,5 +385,39 @@ const styles = StyleSheet.create({
     color: '#D9DDE7',
     fontSize: 16,
     fontWeight: '600',
+  },
+
+  featureButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#151821',
+    borderWidth: 1,
+    borderColor: '#252A37',
+    borderRadius: 16,
+    padding: 20,
+    marginTop: 18,
+  },
+
+  featureText: {
+    flex: 1,
+  },
+
+  featureTitle: {
+    color: '#F7F8FC',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+
+  featureSubtitle: {
+    color: '#9299A8',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 6,
+  },
+
+  arrow: {
+    color: '#4F8CFF',
+    fontSize: 32,
+    marginLeft: 14,
   },
 });

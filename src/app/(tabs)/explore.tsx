@@ -11,8 +11,9 @@ import {
 import { router } from 'expo-router';
 
 import { supabase } from '@/services/supabase';
+import CompanionDiscoveryPanel from '@/components/CompanionDiscoveryPanel';
 
-type TripDestination = {
+type Place = {
   id: string;
   name: string;
   visited: boolean;
@@ -25,546 +26,300 @@ type Trip = {
   start_date: string;
   end_date: string;
   created_by: string;
-  destinations: TripDestination[];
+  destinations: Place[];
 };
 
 export default function ExploreScreen() {
+  const [section, setSection] = useState<
+    'destinations' | 'companions'
+  >('destinations');
+
   const [search, setSearch] = useState('');
-  const [selectedDestination, setSelectedDestination] =
-    useState('');
+  const [destination, setDestination] = useState('');
+  const [popular, setPopular] = useState<string[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
-  const [popularDestinations, setPopularDestinations] =
-    useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingDestinations, setLoadingDestinations] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
-    loadPopularDestinations();
-  }, []);
+    let active = true;
 
-  useEffect(() => {
-    if (selectedDestination) {
-      loadTrips(selectedDestination);
-    }
-  }, [selectedDestination]);
+    async function load() {
+      setLoading(true);
+      setError('');
 
-  const loadPopularDestinations = async () => {
-    setLoadingDestinations(true);
+      try {
+        if (!destination) {
+          const { data, error: queryError } = await supabase
+            .from('trips')
+            .select('destination')
+            .order('created_at', { ascending: false });
 
-    const { data, error } = await supabase
-      .from('trips')
-      .select('destination')
-      .order('created_at', {
-        ascending: false,
-      });
+          if (queryError) throw queryError;
 
-    if (error) {
-      console.log(
-        'Error loading destinations:',
-        error.message
-      );
+          const names = new Map<string, string>();
 
-      setPopularDestinations([]);
-      setLoadingDestinations(false);
-      return;
-    }
+          for (const item of data ?? []) {
+            const name = item.destination?.trim();
 
-    const destinations = (data ?? [])
-      .map((item) => item.destination?.trim())
-      .filter(Boolean);
-
-    const uniqueDestinations = Array.from(
-      new Set(
-        destinations.map(
-          (destination) =>
-            destination.toLowerCase()
-        )
-      )
-    ).map((lowercaseDestination) => {
-      const original = destinations.find(
-        (destination) =>
-          destination.toLowerCase() ===
-          lowercaseDestination
-      );
-
-      return (
-        original ?? lowercaseDestination
-      );
-    });
-
-    setPopularDestinations(
-      uniqueDestinations.slice(0, 6)
-    );
-    setLoadingDestinations(false);
-  };
-
-  const loadTrips = async (
-    destination: string
-  ) => {
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from('trips')
-      .select(
-        'id, name, destination, start_date, end_date, created_by'
-      )
-      .ilike(
-        'destination',
-        `%${destination}%`
-      )
-      .order('created_at', {
-        ascending: false,
-      });
-
-    if (error) {
-      console.log(
-        'Error loading trips:',
-        error.message
-      );
-
-      setTrips([]);
-      setLoading(false);
-      return;
-    }
-
-    const tripsWithDestinations =
-      await Promise.all(
-        (data ?? []).map(
-          async (trip) => {
-            const {
-              data: destinationData,
-              error: destinationError,
-            } = await supabase
-              .from('trip_destinations')
-              .select(
-                'id, name, visited'
-              )
-              .eq('trip_id', trip.id)
-              .order('created_at', {
-                ascending: true,
-              });
-
-            if (destinationError) {
-              console.log(
-                'Error loading trip places:',
-                destinationError.message
-              );
+            if (name && !names.has(name.toLowerCase())) {
+              names.set(name.toLowerCase(), name);
             }
-
-            return {
-              ...trip,
-              destinations:
-                destinationData ?? [],
-            };
           }
-        )
-      );
 
-    setTrips(
-      tripsWithDestinations
-    );
+          if (active) {
+            setPopular(Array.from(names.values()).slice(0, 6));
+          }
+        } else {
+          const { data, error: queryError } = await supabase
+            .from('trips')
+            .select(
+              'id, name, destination, start_date, end_date, created_by'
+            )
+            .ilike('destination', `%${destination}%`)
+            .order('created_at', { ascending: false });
 
-    setLoading(false);
-  };
+          if (queryError) throw queryError;
 
-  const handleSearch = () => {
-    const destination =
-      search.trim();
+          const results: Trip[] = await Promise.all(
+            (data ?? []).map(async (trip) => {
+              const { data: places, error: placesError } =
+                await supabase
+                  .from('trip_destinations')
+                  .select('id, name, visited')
+                  .eq('trip_id', trip.id)
+                  .order('created_at', { ascending: true });
 
-    if (!destination) {
-      return;
+              if (placesError) throw placesError;
+
+              return { ...trip, destinations: places ?? [] };
+            })
+          );
+
+          if (active) setTrips(results);
+        }
+      } catch (err) {
+        if (active) {
+          setError(
+            err instanceof Error ? err.message : 'Unable to load destinations.'
+          );
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
     }
 
-    setSelectedDestination(
-      destination
-    );
-  };
+    void load();
 
-  const selectDestination = (
-    destination: string
-  ) => {
-    setSearch(destination);
-    setSelectedDestination(
-      destination
-    );
-  };
+    return () => {
+      active = false;
+    };
+  }, [destination, refresh]);
 
-  const clearSearch = () => {
+  function searchDestination(value: string) {
+    const name = value.trim();
+    if (!name) return;
+
+    setLoading(true);
+    setSearch(name);
+    setDestination(name);
+    setRefresh((current) => current + 1);
+  }
+
+  function clearSearch() {
+    setLoading(true);
     setSearch('');
-    setSelectedDestination('');
+    setDestination('');
     setTrips([]);
+    setRefresh((current) => current + 1);
+  }
 
-    loadPopularDestinations();
-  };
+  function renderTrip({ item }: { item: Trip }) {
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() =>
+          router.push(`/trip-details?tripId=${item.id}`)
+        }
+      >
+        <Text style={styles.cardTitle}>{item.name}</Text>
+        <Text style={styles.secondary}>📍 {item.destination}</Text>
+
+        <View style={styles.divider} />
+
+        <View style={styles.dateRow}>
+          <View>
+            <Text style={styles.label}>START</Text>
+            <Text style={styles.value}>{item.start_date}</Text>
+          </View>
+          <View>
+            <Text style={styles.label}>END</Text>
+            <Text style={styles.value}>{item.end_date}</Text>
+          </View>
+        </View>
+
+        <View style={styles.divider} />
+
+        <Text style={styles.smallTitle}>Places to Visit</Text>
+
+        {item.destinations.length === 0 ? (
+          <Text style={styles.secondary}>No places added</Text>
+        ) : (
+          item.destinations.map((place) => (
+            <View key={place.id} style={styles.placeRow}>
+              <View
+                style={[
+                  styles.checkbox,
+                  place.visited && styles.checked,
+                ]}
+              >
+                {place.visited && (
+                  <Text style={styles.checkmark}>✓</Text>
+                )}
+              </View>
+              <Text
+                style={[
+                  styles.placeName,
+                  place.visited && styles.visited,
+                ]}
+              >
+                {place.name}
+              </Text>
+            </View>
+          ))
+        )}
+
+        <Text style={styles.link}>View Trip →</Text>
+      </TouchableOpacity>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>
-        Explore Trips
-      </Text>
-
+      <Text style={styles.title}>Explore</Text>
       <Text style={styles.subtitle}>
-        Find travelers going to the same destination.
+        Discover destinations and find your travel companions.
       </Text>
 
-      <View style={styles.searchRow}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Where are you going?"
-          placeholderTextColor="#9CA3AF"
-          value={search}
-          onChangeText={setSearch}
-          onSubmitEditing={handleSearch}
-          returnKeyType="search"
-        />
-
-        <TouchableOpacity
-          style={styles.searchButton}
-          onPress={handleSearch}
-        >
-          <Text style={styles.searchButtonText}>
-            Search
-          </Text>
-        </TouchableOpacity>
+      <View style={styles.tabs}>
+        {(['destinations', 'companions'] as const).map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: section === tab }}
+            style={[
+              styles.tab,
+              section === tab && styles.activeTab,
+            ]}
+            onPress={() => setSection(tab)}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                section === tab && styles.activeTabText,
+              ]}
+            >
+              {tab === 'destinations' ? 'Destinations' : 'Companions'}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      {!selectedDestination && (
-        <>
-          <Text style={styles.sectionTitle}>
-            Popular Destinations
-          </Text>
-
-          {loadingDestinations ? (
-            <View
-              style={
-                styles.destinationLoading
-              }
-            >
-              <ActivityIndicator
-                size="small"
-              />
-
-              <Text
-                style={
-                  styles.loadingText
-                }
-              >
-                Loading destinations...
-              </Text>
-            </View>
-          ) : popularDestinations.length ===
-            0 ? (
-            <View
-              style={styles.noDestinations}
-            >
-              <Text
-                style={styles.emptyIcon}
-              >
-                🧭
-              </Text>
-
-              <Text
-                style={styles.emptyTitle}
-              >
-                No destinations yet
-              </Text>
-
-              <Text
-                style={styles.emptyText}
-              >
-                Create a trip to see
-                destinations here.
-              </Text>
-            </View>
-          ) : (
-            <View
-              style={styles.destinationGrid}
-            >
-              {popularDestinations.map(
-                (destination) => (
-                  <TouchableOpacity
-                    key={destination}
-                    style={
-                      styles.destinationCard
-                    }
-                    onPress={() =>
-                      selectDestination(
-                        destination
-                      )
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.destinationIcon
-                      }
-                    >
-                      📍
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.destinationName
-                      }
-                    >
-                      {destination}
-                    </Text>
-                  </TouchableOpacity>
-                )
-              )}
-            </View>
-          )}
-        </>
-      )}
-
-      {selectedDestination && (
-        <View style={styles.resultsContainer}>
-          <View
-            style={styles.resultsHeader}
-          >
-            <View>
-              <Text
-                style={styles.resultsLabel}
-              >
-                TRIPS GOING TO
-              </Text>
-
-              <Text
-                style={styles.resultsTitle}
-              >
-                {selectedDestination}
-              </Text>
-            </View>
-
+      {section === 'companions' ? (
+        <CompanionDiscoveryPanel />
+      ) : (
+        <View style={styles.flex}>
+          <View style={styles.searchRow}>
+            <TextInput
+              accessibilityLabel="Search trips by destination"
+              style={styles.input}
+              placeholder="Where are you going?"
+              placeholderTextColor="#9299A8"
+              value={search}
+              onChangeText={setSearch}
+              onSubmitEditing={() => searchDestination(search)}
+              returnKeyType="search"
+            />
             <TouchableOpacity
-              onPress={clearSearch}
+              style={styles.searchButton}
+              onPress={() => searchDestination(search)}
             >
-              <Text
-                style={styles.clearText}
-              >
-                Clear
-              </Text>
+              <Text style={styles.buttonText}>Search</Text>
             </TouchableOpacity>
           </View>
 
-          {loading ? (
-            <View
-              style={styles.loadingContainer}
-            >
-              <ActivityIndicator
-                size="large"
-              />
-
-              <Text
-                style={
-                  styles.loadingText
-                }
-              >
-                Finding trips...
-              </Text>
-            </View>
-          ) : trips.length === 0 ? (
-            <View
-              style={styles.emptyContainer}
-            >
-              <Text
-                style={styles.emptyIcon}
-              >
-                🧭
-              </Text>
-
-              <Text
-                style={styles.emptyTitle}
-              >
-                No trips found
-              </Text>
-
-              <Text
-                style={styles.emptyText}
-              >
-                There are no trips going to{' '}
-                {selectedDestination} yet.
-              </Text>
-
-              <Text
-                style={styles.emptyHint}
-              >
-                Try searching for another
-                destination.
-              </Text>
+          {destination ? (
+            <View style={styles.resultsHeader}>
+              <View style={styles.flex}>
+                <Text style={styles.label}>TRIPS GOING TO</Text>
+                <Text style={styles.resultsTitle}>{destination}</Text>
+              </View>
+              <TouchableOpacity onPress={clearSearch}>
+                <Text style={styles.link}>Clear</Text>
+              </TouchableOpacity>
             </View>
           ) : (
+            <Text style={styles.sectionTitle}>
+              Destinations from Recent Trips
+            </Text>
+          )}
+
+          {loading ? (
+            <View style={styles.empty}>
+              <ActivityIndicator size="large" color="#4F8CFF" />
+              <Text style={styles.secondary}>Loading...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.empty}>
+              <Text style={styles.error}>{error}</Text>
+              <TouchableOpacity
+                onPress={() => setRefresh((current) => current + 1)}
+              >
+                <Text style={styles.link}>Try Again</Text>
+              </TouchableOpacity>
+            </View>
+          ) : destination ? (
             <FlatList
+              key="trips"
               data={trips}
-              keyExtractor={(item) =>
-                item.id
+              keyExtractor={(item) => item.id}
+              renderItem={renderTrip}
+              contentContainerStyle={styles.list}
+              ListEmptyComponent={
+                <View style={styles.empty}>
+                  <Text style={styles.cardTitle}>No trips found</Text>
+                  <Text style={styles.secondary}>
+                    Try another destination.
+                  </Text>
+                </View>
               }
-              showsVerticalScrollIndicator={
-                false
-              }
-              contentContainerStyle={
-                styles.list
-              }
+            />
+          ) : (
+            <FlatList
+              key="destinations"
+              data={popular}
+              numColumns={2}
+              keyExtractor={(item) => item}
+              contentContainerStyle={styles.list}
+              columnWrapperStyle={styles.gridRow}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.tripCard}
-                  onPress={() =>
-                    router.push(
-                      `/trip-details?tripId=${item.id}`
-                    )
-                  }
+                  style={styles.destinationCard}
+                  onPress={() => searchDestination(item)}
                 >
-                  <View
-                    style={styles.tripHeader}
-                  >
-                    <View
-                      style={
-                        styles.locationCircle
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.locationIcon
-                        }
-                      >
-                        📍
-                      </Text>
-                    </View>
-
-                    <View
-                      style={styles.tripInfo}
-                    >
-                      <Text
-                        style={styles.tripName}
-                      >
-                        {item.name}
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.tripDestination
-                        }
-                      >
-                        {item.destination}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View
-                    style={styles.divider}
-                  />
-
-                  <View
-                    style={styles.dateRow}
-                  >
-                    <View>
-                      <Text
-                        style={
-                          styles.dateLabel
-                        }
-                      >
-                        START
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.dateValue
-                        }
-                      >
-                        {item.start_date}
-                      </Text>
-                    </View>
-
-                    <View>
-                      <Text
-                        style={
-                          styles.dateLabel
-                        }
-                      >
-                        END
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.dateValue
-                        }
-                      >
-                        {item.end_date}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View
-                    style={
-                      styles.placesSection
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.placesTitle
-                      }
-                    >
-                      Places to Visit
-                    </Text>
-
-                    {item.destinations
-                      .length === 0 ? (
-                      <Text
-                        style={
-                          styles.noPlacesText
-                        }
-                      >
-                        No places added
-                      </Text>
-                    ) : (
-                      item.destinations.map(
-                        (place) => (
-                          <View
-                            key={place.id}
-                            style={
-                              styles.placeRow
-                            }
-                          >
-                            <View
-                              style={[
-                                styles.smallCheckbox,
-                                place.visited &&
-                                  styles.smallCheckboxVisited,
-                              ]}
-                            >
-                              {place.visited && (
-                                <Text
-                                  style={
-                                    styles.smallCheckmark
-                                  }
-                                >
-                                  ✓
-                                </Text>
-                              )}
-                            </View>
-
-                            <Text
-                              style={[
-                                styles.placeName,
-                                place.visited &&
-                                  styles.placeNameVisited,
-                              ]}
-                            >
-                              {place.name}
-                            </Text>
-                          </View>
-                        )
-                      )
-                    )}
-                  </View>
-
-                  <Text
-                    style={styles.viewTrip}
-                  >
-                    View Trip →
-                  </Text>
+                  <Text style={styles.destinationIcon}>📍</Text>
+                  <Text style={styles.cardTitle}>{item}</Text>
                 </TouchableOpacity>
               )}
+              ListEmptyComponent={
+                <View style={styles.empty}>
+                  <Text style={styles.cardTitle}>No destinations yet</Text>
+                  <Text style={styles.secondary}>
+                    Create a trip to see destinations here.
+                  </Text>
+                </View>
+              }
             />
           )}
         </View>
@@ -574,52 +329,116 @@ export default function ExploreScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#08090D', padding: 22, paddingTop: 28 },
-  title: { fontSize: 29, fontWeight: '800', color: '#F7F8FC', letterSpacing: -0.5 },
-  subtitle: { fontSize: 14, color: '#9299A8', marginTop: 7, marginBottom: 22, lineHeight: 20 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 28 },
-  searchInput: { flex: 1, height: 52, backgroundColor: '#151821', borderWidth: 1, borderColor: '#292E3B', borderRadius: 15, paddingHorizontal: 16, fontSize: 15, color: '#F7F8FC' },
-  searchButton: { height: 52, backgroundColor: '#4F8CFF', borderRadius: 15, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 17, marginLeft: 9 },
-  searchButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
-  sectionTitle: { fontSize: 18, fontWeight: '750', color: '#F7F8FC', marginBottom: 15 },
-  destinationLoading: { alignItems: 'center', marginTop: 30 },
-  destinationGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  destinationCard: { width: '48%', minHeight: 105, backgroundColor: '#151821', borderRadius: 17, padding: 17, marginBottom: 12, borderWidth: 1, borderColor: '#252A37', alignItems: 'flex-start', justifyContent: 'center' },
-  destinationIcon: { fontSize: 22, marginBottom: 9 },
-  destinationName: { fontSize: 15, fontWeight: '650', color: '#F0F2F8' },
-  resultsContainer: { flex: 1 },
-  resultsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
-  resultsLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: '#858D9D' },
-  resultsTitle: { fontSize: 23, fontWeight: '800', color: '#F7F8FC', marginTop: 5 },
-  clearText: { color: '#6FA0FF', fontSize: 14, fontWeight: '700' },
-  loadingContainer: { alignItems: 'center', marginTop: 60 },
-  loadingText: { color: '#9299A8', marginTop: 10 },
+  container: {
+    flex: 1,
+    backgroundColor: '#08090D',
+    padding: 22,
+    paddingTop: 28,
+  },
+  flex: { flex: 1 },
+  title: { fontSize: 29, fontWeight: '800', color: '#F7F8FC' },
+  subtitle: {
+    color: '#9299A8',
+    marginTop: 7,
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: '#151821',
+    borderRadius: 14,
+    padding: 5,
+    marginBottom: 20,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  activeTab: { backgroundColor: '#4F8CFF' },
+  tabText: { color: '#9299A8', fontWeight: '700' },
+  activeTabText: { color: '#FFFFFF' },
+  searchRow: { flexDirection: 'row', marginBottom: 20 },
+  input: {
+    flex: 1,
+    color: '#F7F8FC',
+    backgroundColor: '#151821',
+    borderWidth: 1,
+    borderColor: '#292E3B',
+    borderRadius: 14,
+    paddingHorizontal: 15,
+    paddingVertical: 14,
+  },
+  searchButton: {
+    justifyContent: 'center',
+    backgroundColor: '#4F8CFF',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    marginLeft: 9,
+  },
+  buttonText: { color: '#FFFFFF', fontWeight: '700' },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#F7F8FC',
+    marginBottom: 15,
+  },
+  resultsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  resultsTitle: {
+    color: '#F7F8FC',
+    fontSize: 23,
+    fontWeight: '700',
+    marginTop: 5,
+  },
   list: { paddingBottom: 30 },
-  tripCard: { backgroundColor: '#151821', borderRadius: 18, padding: 18, marginBottom: 14, borderWidth: 1, borderColor: '#252A37' },
-  tripHeader: { flexDirection: 'row', alignItems: 'center' },
-  locationCircle: { width: 48, height: 48, borderRadius: 16, backgroundColor: '#202D49', justifyContent: 'center', alignItems: 'center' },
-  locationIcon: { fontSize: 21 },
-  tripInfo: { flex: 1, marginLeft: 13 },
-  tripName: { fontSize: 17, fontWeight: '750', color: '#F7F8FC' },
-  tripDestination: { fontSize: 13, color: '#9AA2B2', marginTop: 4 },
+  gridRow: { justifyContent: 'space-between' },
+  destinationCard: {
+    width: '48%',
+    minHeight: 105,
+    backgroundColor: '#151821',
+    borderRadius: 17,
+    padding: 17,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#252A37',
+  },
+  destinationIcon: { fontSize: 22, marginBottom: 10 },
+  card: {
+    backgroundColor: '#151821',
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#252A37',
+  },
+  cardTitle: { color: '#F7F8FC', fontSize: 17, fontWeight: '700' },
+  secondary: { color: '#9299A8', marginTop: 7, lineHeight: 20 },
   divider: { height: 1, backgroundColor: '#292E3B', marginVertical: 16 },
   dateRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  dateLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1, color: '#858D9D' },
-  dateValue: { fontSize: 13, color: '#D7DBE5', marginTop: 5 },
-  placesSection: { marginTop: 18, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#292E3B' },
-  placesTitle: { fontSize: 14, fontWeight: '750', color: '#F0F2F8', marginBottom: 10 },
-  smallCheckbox: { width: 19, height: 19, borderRadius: 5, borderWidth: 1.5, borderColor: '#697386', justifyContent: 'center', alignItems: 'center', marginRight: 9 },
-  smallCheckboxVisited: { backgroundColor: '#4F8CFF', borderColor: '#4F8CFF' },
-  smallCheckmark: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  label: { color: '#858D9D', fontSize: 10, fontWeight: '700' },
+  value: { color: '#D7DBE5', fontSize: 13, marginTop: 6 },
+  smallTitle: { color: '#F7F8FC', fontWeight: '700', marginBottom: 10 },
   placeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 7 },
-  placeName: { flex: 1, fontSize: 13, color: '#D7DBE5' },
-  placeNameVisited: { color: '#777F90', textDecorationLine: 'line-through' },
-  noPlacesText: { fontSize: 13, color: '#858D9D' },
-  viewTrip: { color: '#75A2FF', fontSize: 14, fontWeight: '750', marginTop: 16 },
-  emptyContainer: { alignItems: 'center', marginTop: 65, paddingHorizontal: 20, backgroundColor: '#151821', borderRadius: 18, borderWidth: 1, borderColor: '#252A37', paddingVertical: 30 },
-  noDestinations: { alignItems: 'center', marginTop: 45, paddingHorizontal: 20, backgroundColor: '#151821', borderRadius: 18, borderWidth: 1, borderColor: '#252A37', paddingVertical: 28 },
-  emptyIcon: { fontSize: 42 },
-  emptyTitle: { fontSize: 19, fontWeight: '750', color: '#F7F8FC', marginTop: 12 },
-  emptyText: { fontSize: 14, color: '#A0A7B5', textAlign: 'center', marginTop: 7, lineHeight: 21 },
-  emptyHint: { fontSize: 13, color: '#858D9D', textAlign: 'center', marginTop: 8 },
+  checkbox: {
+    width: 19,
+    height: 19,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#697386',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 9,
+  },
+  checked: { backgroundColor: '#4F8CFF', borderColor: '#4F8CFF' },
+  checkmark: { color: '#FFFFFF', fontSize: 12 },
+  placeName: { flex: 1, color: '#D7DBE5', fontSize: 13 },
+  visited: { color: '#777F90', textDecorationLine: 'line-through' },
+  link: { color: '#75A2FF', fontWeight: '700', marginTop: 12 },
+  empty: { padding: 24, alignItems: 'center' },
+  error: { color: '#FF9B9B', textAlign: 'center' },
 });
