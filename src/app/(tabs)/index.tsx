@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -7,12 +8,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { router } from 'expo-router';
 
-import { supabase } from '@/services/supabase';
-import { getMyTrips } from '@/services/trips';
 import ProfileButton from '@/components/ProfileButton';
 import ProfilePanel from '@/components/ProfilePanel';
+import { supabase } from '@/services/supabase';
+import { getMyTrips } from '@/services/trips';
 
 type Trip = {
   id: string;
