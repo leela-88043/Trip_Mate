@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { supabase } from '@/services/supabase';
 import {
@@ -16,6 +17,8 @@ import {
   removeTripMember,
 } from '@/services/tripMembers';
 import { deleteTrip } from '@/services/trip';
+import { useTripToday } from '@/hooks/useTripToday';
+import { getTodayKey, getTripStatus } from '@/utils/tripTimeline';
 
 type Trip = {
   id: string;
@@ -35,6 +38,9 @@ type TripDestination = {
 
 export default function TripDetailsScreen() {
   const { tripId } = useLocalSearchParams();
+  const today = useTripToday();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [members, setMembers] = useState<any[]>([]);
@@ -52,11 +58,8 @@ export default function TripDetailsScreen() {
   const [currentUserId, setCurrentUserId] =
     useState('');
 
-  useEffect(() => {
-    loadTrip();
-  }, []);
-
-  const loadTrip = async () => {
+  const loadTrip = useCallback(async () => {
+    setLoading(true);
     if (!tripId) {
       Alert.alert(
         'Error',
@@ -151,7 +154,11 @@ export default function TripDetailsScreen() {
     }
 
     setLoading(false);
-  };
+  }, [tripId]);
+
+  useFocusEffect(useCallback(() => {
+    void loadTrip();
+  }, [loadTrip]));
 
   const handleTogglePlace = async (
     place: TripDestination
@@ -190,6 +197,10 @@ export default function TripDetailsScreen() {
   };
 
   const handleJoinTrip = async () => {
+    if (trip && getTripStatus(trip, getTodayKey()) === 'completed') {
+      Alert.alert('Trip Completed', 'This trip has already ended.');
+      return;
+    }
     if (!tripId) {
       Alert.alert(
         'Error',
@@ -235,81 +246,43 @@ export default function TripDetailsScreen() {
     loadTrip();
   };
 
-  const handleDeleteTrip = async () => {
-    if (!tripId) {
-      Alert.alert(
-        'Error',
-        'Trip ID is missing.'
-      );
-      return;
-    }
-
-    Alert.alert(
-      'Delete Trip',
-      'Are you sure you want to delete this trip? This action cannot be undone.',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const {
-              data: { user },
-            } = await supabase.auth.getUser();
-
-            if (!user) {
-              Alert.alert(
-                'Login Required',
-                'Please login first.'
-              );
-              return;
+    const handleDeleteTrip = () => {
+        if (!trip || trip.created_by !== currentUserId || getTripStatus(trip, getTodayKey()) !== 'completed') {
+            setDeleteError('Only the owner can delete a completed trip.');
+            return;
+        }
+        setDeleteError('');
+        setConfirmDelete(true);
+    };
+    const confirmDeleteTrip = async () => {
+        if (!trip || deleting)
+            return;
+        setDeleting(true);
+        setDeleteError('');
+        try {
+            const { data: { user }, error: authError } = await supabase.auth.getUser();
+            if (authError)
+                throw new Error(authError.message);
+            if (!user)
+                throw new Error('Please log in first.');
+            if (trip.created_by !== user.id || getTripStatus(trip, getTodayKey()) !== 'completed') {
+                throw new Error('Only the owner can delete a completed trip.');
             }
-
-            setDeleting(true);
-
-            const { data, error } =
-              await deleteTrip(
-                String(tripId),
-                user.id
-              );
-
+            const { data, error } = await deleteTrip(trip.id, user.id);
+            if (error)
+                throw new Error(error.message);
+            if (!data)
+                throw new Error('Trip was not deleted. Refresh to check its dates and ownership.');
+            setConfirmDelete(false);
+            router.replace('/my-trips');
+        }
+        catch (error) {
+            setDeleteError(error instanceof Error ? error.message : 'Unable to delete trip.');
+        }
+        finally {
             setDeleting(false);
-
-            if (error) {
-              Alert.alert(
-                'Delete Failed',
-                error.message
-              );
-              return;
-            }
-
-            if (!data) {
-              Alert.alert(
-                'Delete Failed',
-                'The trip could not be deleted. You may not be the owner.'
-              );
-              return;
-            }
-
-            Alert.alert(
-              'Success',
-              'Trip deleted successfully.',
-              [
-                {
-                  text: 'OK',
-                  onPress: () =>
-                    router.replace('/my-trips'),
-                },
-              ]
-            );
-          },
-        },
-      ]
-    );
-  };
+        }
+    };
 
   const handleRemoveMember = (
     memberUserId: string,
@@ -415,6 +388,11 @@ export default function TripDetailsScreen() {
         Trip Details
       </Text>
 
+      <Text style={styles.tripStatus}>
+        {getTripStatus(trip, today) === 'completed' ? 'Completed' : getTripStatus(trip, today) === 'ongoing' ? 'Ongoing' : getTripStatus(trip, today) === 'upcoming' ? 'Upcoming' : 'Dates unavailable'}
+      </Text>
+      {!!deleteError && <Text style={styles.deleteError}>{deleteError}</Text>}
+
       <Text style={styles.label}>
         Trip Name
       </Text>
@@ -470,6 +448,7 @@ export default function TripDetailsScreen() {
             </Text>
           </TouchableOpacity>
 
+          {getTripStatus(trip, today) === 'completed' && (
           <TouchableOpacity
             style={styles.deleteButton}
             onPress={handleDeleteTrip}
@@ -479,14 +458,15 @@ export default function TripDetailsScreen() {
               <ActivityIndicator color="#DC2626" />
             ) : (
               <Text style={styles.deleteButtonText}>
-                Delete Trip
+                Delete Completed Trip
               </Text>
             )}
           </TouchableOpacity>
+          )}
         </>
       )}
 
-      {!isOwner && (
+      {!isOwner && getTripStatus(trip, today) !== 'completed' && (
         <TouchableOpacity
           style={styles.joinButton}
           onPress={handleJoinTrip}
@@ -644,11 +624,35 @@ export default function TripDetailsScreen() {
           );
         })
       )}
+<Modal visible={confirmDelete} transparent animationType="fade" onRequestClose={() => {
+            if (!deleting)
+                setConfirmDelete(false);
+        }}>
+        <View style={styles.deleteBackdrop}>
+          <View style={styles.deleteDialog} accessibilityViewIsModal>
+            <Text style={styles.placesTitle}>Delete completed trip?</Text>
+            <Text style={styles.noPlacesText}>
+              Delete “{trip.name}”? This permanently deletes the trip for all its members.
+            </Text>
+            {!!deleteError && <Text style={styles.deleteError}>{deleteError}</Text>}
+            <TouchableOpacity style={styles.deleteButton} disabled={deleting} onPress={() => void confirmDeleteTrip()}>
+              <Text style={styles.deleteButtonText}>{deleting ? 'Deleting...' : 'Delete Trip'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.editButton} disabled={deleting} onPress={() => setConfirmDelete(false)}>
+              <Text style={styles.editButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  tripStatus: { color: '#83DCAA', fontWeight: '700', marginBottom: 12 },
+  deleteError: { color: '#FF9B9B', marginVertical: 10 },
+  deleteBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  deleteDialog: { width: '100%', maxWidth: 460, backgroundColor: '#151821', borderRadius: 18, padding: 22 },
   scrollView: {
     flex: 1,
     backgroundColor: '#08090D',

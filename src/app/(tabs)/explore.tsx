@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,6 +11,7 @@ import {
 import { router } from 'expo-router';
 
 import { supabase } from '@/services/supabase';
+import { useTripToday } from '@/hooks/useTripToday';
 
 type TripDestination = {
   id: string;
@@ -29,6 +30,7 @@ type Trip = {
 };
 
 export default function ExploreScreen() {
+  const today = useTripToday();
   const [search, setSearch] = useState('');
   const [selectedDestination, setSelectedDestination] =
     useState('');
@@ -39,22 +41,11 @@ export default function ExploreScreen() {
   const [loadingDestinations, setLoadingDestinations] =
     useState(true);
 
-  useEffect(() => {
-    loadPopularDestinations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedDestination) {
-      loadTrips(selectedDestination);
-    }
-  }, [selectedDestination]);
-
-  const loadPopularDestinations = async () => {
-    setLoadingDestinations(true);
-
+  const loadPopularDestinations = useCallback(async () => {
     const { data, error } = await supabase
       .from('trips')
       .select('destination')
+      .gte('end_date', today)
       .order('created_at', {
         ascending: false,
       });
@@ -97,18 +88,17 @@ export default function ExploreScreen() {
       uniqueDestinations.slice(0, 6)
     );
     setLoadingDestinations(false);
-  };
+  }, [today]);
 
-  const loadTrips = async (
+  const loadTrips = useCallback(async (
     destination: string
   ) => {
-    setLoading(true);
-
     const { data, error } = await supabase
       .from('trips')
       .select(
         'id, name, destination, start_date, end_date, created_by'
       )
+      .gte('end_date', today)
       .ilike(
         'destination',
         `%${destination}%`
@@ -166,7 +156,18 @@ export default function ExploreScreen() {
     );
 
     setLoading(false);
-  };
+  }, [today]);
+
+  useEffect(() => {
+    // Start the fetch asynchronously; loading state is initialized above.
+    void Promise.resolve().then(loadPopularDestinations);
+  }, [loadPopularDestinations]);
+
+  useEffect(() => {
+    if (selectedDestination) {
+      void Promise.resolve().then(() => loadTrips(selectedDestination));
+    }
+  }, [selectedDestination, loadTrips]);
 
   const handleSearch = () => {
     const destination =
@@ -176,6 +177,7 @@ export default function ExploreScreen() {
       return;
     }
 
+    if (destination !== selectedDestination) setLoading(true);
     setSelectedDestination(
       destination
     );
@@ -184,6 +186,7 @@ export default function ExploreScreen() {
   const selectDestination = (
     destination: string
   ) => {
+    if (destination !== selectedDestination) setLoading(true);
     setSearch(destination);
     setSelectedDestination(
       destination
@@ -191,6 +194,7 @@ export default function ExploreScreen() {
   };
 
   const clearSearch = () => {
+    setLoadingDestinations(true);
     setSearch('');
     setSelectedDestination('');
     setTrips([]);
@@ -205,7 +209,7 @@ export default function ExploreScreen() {
       </Text>
 
       <Text style={styles.subtitle}>
-        Find travelers going to the same destination.
+        Find travellers on upcoming and ongoing trips.
       </Text>
 
       <View style={styles.searchRow}>
@@ -382,7 +386,7 @@ export default function ExploreScreen() {
               <Text
                 style={styles.emptyText}
               >
-                There are no trips going to{' '}
+                There are no active trips going to{' '}
                 {selectedDestination} yet.
               </Text>
 
@@ -395,7 +399,7 @@ export default function ExploreScreen() {
             </View>
           ) : (
             <FlatList
-              data={trips}
+              data={trips.filter((trip) => trip.end_date >= today)}
               keyExtractor={(item) =>
                 item.id
               }
@@ -581,12 +585,12 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, height: 52, backgroundColor: '#151821', borderWidth: 1, borderColor: '#292E3B', borderRadius: 15, paddingHorizontal: 16, fontSize: 15, color: '#F7F8FC' },
   searchButton: { height: 52, backgroundColor: '#4F8CFF', borderRadius: 15, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 17, marginLeft: 9 },
   searchButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
-  sectionTitle: { fontSize: 18, fontWeight: '750', color: '#F7F8FC', marginBottom: 15 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#F7F8FC', marginBottom: 15 },
   destinationLoading: { alignItems: 'center', marginTop: 30 },
   destinationGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   destinationCard: { width: '48%', minHeight: 105, backgroundColor: '#151821', borderRadius: 17, padding: 17, marginBottom: 12, borderWidth: 1, borderColor: '#252A37', alignItems: 'flex-start', justifyContent: 'center' },
   destinationIcon: { fontSize: 22, marginBottom: 9 },
-  destinationName: { fontSize: 15, fontWeight: '650', color: '#F0F2F8' },
+  destinationName: { fontSize: 15, fontWeight: '600', color: '#F0F2F8' },
   resultsContainer: { flex: 1 },
   resultsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   resultsLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: '#858D9D' },
@@ -600,14 +604,14 @@ const styles = StyleSheet.create({
   locationCircle: { width: 48, height: 48, borderRadius: 16, backgroundColor: '#202D49', justifyContent: 'center', alignItems: 'center' },
   locationIcon: { fontSize: 21 },
   tripInfo: { flex: 1, marginLeft: 13 },
-  tripName: { fontSize: 17, fontWeight: '750', color: '#F7F8FC' },
+  tripName: { fontSize: 17, fontWeight: '700', color: '#F7F8FC' },
   tripDestination: { fontSize: 13, color: '#9AA2B2', marginTop: 4 },
   divider: { height: 1, backgroundColor: '#292E3B', marginVertical: 16 },
   dateRow: { flexDirection: 'row', justifyContent: 'space-between' },
   dateLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1, color: '#858D9D' },
   dateValue: { fontSize: 13, color: '#D7DBE5', marginTop: 5 },
   placesSection: { marginTop: 18, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#292E3B' },
-  placesTitle: { fontSize: 14, fontWeight: '750', color: '#F0F2F8', marginBottom: 10 },
+  placesTitle: { fontSize: 14, fontWeight: '700', color: '#F0F2F8', marginBottom: 10 },
   smallCheckbox: { width: 19, height: 19, borderRadius: 5, borderWidth: 1.5, borderColor: '#697386', justifyContent: 'center', alignItems: 'center', marginRight: 9 },
   smallCheckboxVisited: { backgroundColor: '#4F8CFF', borderColor: '#4F8CFF' },
   smallCheckmark: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
@@ -615,11 +619,11 @@ const styles = StyleSheet.create({
   placeName: { flex: 1, fontSize: 13, color: '#D7DBE5' },
   placeNameVisited: { color: '#777F90', textDecorationLine: 'line-through' },
   noPlacesText: { fontSize: 13, color: '#858D9D' },
-  viewTrip: { color: '#75A2FF', fontSize: 14, fontWeight: '750', marginTop: 16 },
+  viewTrip: { color: '#75A2FF', fontSize: 14, fontWeight: '700', marginTop: 16 },
   emptyContainer: { alignItems: 'center', marginTop: 65, paddingHorizontal: 20, backgroundColor: '#151821', borderRadius: 18, borderWidth: 1, borderColor: '#252A37', paddingVertical: 30 },
   noDestinations: { alignItems: 'center', marginTop: 45, paddingHorizontal: 20, backgroundColor: '#151821', borderRadius: 18, borderWidth: 1, borderColor: '#252A37', paddingVertical: 28 },
   emptyIcon: { fontSize: 42 },
-  emptyTitle: { fontSize: 19, fontWeight: '750', color: '#F7F8FC', marginTop: 12 },
+  emptyTitle: { fontSize: 19, fontWeight: '700', color: '#F7F8FC', marginTop: 12 },
   emptyText: { fontSize: 14, color: '#A0A7B5', textAlign: 'center', marginTop: 7, lineHeight: 21 },
   emptyHint: { fontSize: 13, color: '#858D9D', textAlign: 'center', marginTop: 8 },
 });

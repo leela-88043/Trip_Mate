@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
 ActivityIndicator,
 ScrollView,
@@ -7,7 +7,9 @@ Text,
 TouchableOpacity,
 View,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { useTripToday } from '@/hooks/useTripToday';
+import { isActiveTrip } from '@/utils/tripTimeline';
 
 import { supabase } from '@/services/supabase';
 import { getMyTrips } from '@/services/trips';
@@ -25,15 +27,14 @@ end_date: string;
 export default function HomeScreen() {
 const [fullName, setFullName] = useState('Traveler');
 const [email, setEmail] = useState('');
-const [upcomingTrip, setUpcomingTrip] = useState<Trip | null>(null);
+const today = useTripToday();
+const [allTrips, setAllTrips] = useState<Trip[]>([]);
+const upcomingTrip = allTrips.filter((trip) => isActiveTrip(trip, today))
+  .sort((a, b) => a.start_date.localeCompare(b.start_date))[0] ?? null;
 const [loading, setLoading] = useState(true);
 const [profileVisible, setProfileVisible] = useState(false);
 
-useEffect(() => {
-loadDashboard();
-}, []);
-
-const loadDashboard = async () => {
+const loadDashboard = useCallback(async () => {
 setLoading(true);
 
 try {
@@ -42,7 +43,9 @@ try {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    setLoading(false);
+    setAllTrips([]);
+    setFullName('Traveler');
+    setEmail('');
     return;
   }
 
@@ -77,27 +80,27 @@ try {
     setEmail(profile.email);
   }
 
-  const { data } = await getMyTrips(user.id);
-
-  const trips: Trip[] = (data ?? [])
-    .map((item: any) => item.trips)
-    .filter(Boolean);
-
-  if (trips.length > 0) {
-    setUpcomingTrip(trips[0]);
-  } else {
-    setUpcomingTrip(null);
-  }
+  const { data, error: tripsError } = await getMyTrips(user.id);
+  if (tripsError) throw new Error(tripsError.message);
+  const rows = (data ?? []) as unknown as { trips: Trip | Trip[] | null }[];
+  const trips = rows.flatMap((row) => !row.trips ? [] : Array.isArray(row.trips) ? row.trips : [row.trips]);
+  setAllTrips(trips);
 } catch (error) {
   console.error('Dashboard loading error:', error);
 } finally {
   setLoading(false);
 }
 
-};
+}, []);
+
+useFocusEffect(useCallback(() => {
+  void loadDashboard();
+}, [loadDashboard]));
 
 if (loading) {
-return ( <View style={styles.loadingContainer}> <ActivityIndicator size="large" color="#4F8CFF" />
+return (
+<View style={styles.loadingContainer}>
+<ActivityIndicator size="large" color="#4F8CFF" />
 
     <Text style={styles.loadingText}>
       Loading Trip Mate...
@@ -107,12 +110,17 @@ return ( <View style={styles.loadingContainer}> <ActivityIndicator size="large" 
 
 }
 
-return ( <View style={styles.screen}> <ScrollView
+return (
+<View style={styles.screen}>
+<ScrollView
      style={styles.container}
      contentContainerStyle={styles.content}
      showsVerticalScrollIndicator={false}
    >
-{/* Header */} <View style={styles.header}> <View> <Text style={styles.greeting}>
+{/* Header */}
+<View style={styles.header}>
+<View>
+<Text style={styles.greeting}>
 Welcome back 👋 </Text>
 
         <Text style={styles.name}>
@@ -193,11 +201,11 @@ Welcome back 👋 </Text>
         </Text>
 
         <Text style={styles.emptyTitle}>
-          No trips yet
+          No active trips
         </Text>
 
         <Text style={styles.emptyText}>
-          Create your first trip and start planning your journey.
+          Create a new trip to plan your next journey. Completed trips are available in My Trips.
         </Text>
       </View>
     )}
