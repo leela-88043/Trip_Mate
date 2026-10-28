@@ -33,7 +33,7 @@ tabBarInactiveTintColor: '#858D9D',
         <Ionicons
           name={focused ? 'home' : 'home-outline'}
           size={size}
-          color={color}
+          color={typeof color === 'string' ? color : focused ? '#4F8CFF' : '#858D9D'}
         />
       ),
     }}
@@ -47,7 +47,7 @@ tabBarInactiveTintColor: '#858D9D',
         <Ionicons
           name={focused ? 'compass' : 'compass-outline'}
           size={size}
-          color={color}
+          color={typeof color === 'string' ? color : focused ? '#4F8CFF' : '#858D9D'}
         />
       ),
     }}
@@ -77,7 +77,7 @@ tabBarInactiveTintColor: '#858D9D',
         <Ionicons
           name={focused ? 'briefcase' : 'briefcase-outline'}
           size={size}
-          color={color}
+          color={typeof color === 'string' ? color : focused ? '#4F8CFF' : '#858D9D'}
         />
       ),
     }}
@@ -91,7 +91,7 @@ tabBarInactiveTintColor: '#858D9D',
         <Ionicons
           name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'}
           size={size}
-          color={color}
+          color={typeof color === 'string' ? color : focused ? '#4F8CFF' : '#858D9D'}
         />
       ),
     }}
