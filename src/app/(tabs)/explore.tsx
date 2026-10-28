@@ -12,6 +12,7 @@ import { router } from 'expo-router';
 
 import { supabase } from '@/services/supabase';
 import CompanionDiscoveryPanel from '@/components/CompanionDiscoveryPanel';
+import { useTripToday } from '@/hooks/useTripToday';
 
 type Place = {
   id: string;
@@ -30,6 +31,8 @@ type Trip = {
 };
 
 export default function ExploreScreen() {
+  const today = useTripToday();
+
   const [section, setSection] = useState<
     'destinations' | 'companions'
   >('destinations');
@@ -54,9 +57,12 @@ export default function ExploreScreen() {
           const { data, error: queryError } = await supabase
             .from('trips')
             .select('destination')
+            .gte('end_date', today)
             .order('created_at', { ascending: false });
 
-          if (queryError) throw queryError;
+          if (queryError) {
+            throw new Error(queryError.message);
+          }
 
           const names = new Map<string, string>();
 
@@ -77,10 +83,13 @@ export default function ExploreScreen() {
             .select(
               'id, name, destination, start_date, end_date, created_by'
             )
+            .gte('end_date', today)
             .ilike('destination', `%${destination}%`)
-            .order('created_at', { ascending: false });
+            .order('start_date', { ascending: true });
 
-          if (queryError) throw queryError;
+          if (queryError) {
+            throw new Error(queryError.message);
+          }
 
           const results: Trip[] = await Promise.all(
             (data ?? []).map(async (trip) => {
@@ -91,22 +100,33 @@ export default function ExploreScreen() {
                   .eq('trip_id', trip.id)
                   .order('created_at', { ascending: true });
 
-              if (placesError) throw placesError;
+              if (placesError) {
+                throw new Error(placesError.message);
+              }
 
-              return { ...trip, destinations: places ?? [] };
+              return {
+                ...trip,
+                destinations: places ?? [],
+              };
             })
           );
 
-          if (active) setTrips(results);
+          if (active) {
+            setTrips(results);
+          }
         }
       } catch (err) {
         if (active) {
           setError(
-            err instanceof Error ? err.message : 'Unable to load destinations.'
+            err instanceof Error
+              ? err.message
+              : 'Unable to load destinations.'
           );
         }
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     }
 
@@ -115,10 +135,11 @@ export default function ExploreScreen() {
     return () => {
       active = false;
     };
-  }, [destination, refresh]);
+  }, [destination, refresh, today]);
 
   function searchDestination(value: string) {
     const name = value.trim();
+
     if (!name) return;
 
     setLoading(true);
@@ -144,7 +165,14 @@ export default function ExploreScreen() {
         }
       >
         <Text style={styles.cardTitle}>{item.name}</Text>
-        <Text style={styles.secondary}>📍 {item.destination}</Text>
+
+        <Text style={styles.secondary}>
+          📍 {item.destination}
+        </Text>
+
+        <Text style={styles.link}>
+          {item.start_date > today ? 'Upcoming' : 'Ongoing'}
+        </Text>
 
         <View style={styles.divider} />
 
@@ -153,6 +181,7 @@ export default function ExploreScreen() {
             <Text style={styles.label}>START</Text>
             <Text style={styles.value}>{item.start_date}</Text>
           </View>
+
           <View>
             <Text style={styles.label}>END</Text>
             <Text style={styles.value}>{item.end_date}</Text>
@@ -178,6 +207,7 @@ export default function ExploreScreen() {
                   <Text style={styles.checkmark}>✓</Text>
                 )}
               </View>
+
               <Text
                 style={[
                   styles.placeName,
@@ -198,6 +228,7 @@ export default function ExploreScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Explore</Text>
+
       <Text style={styles.subtitle}>
         Discover destinations and find your travel companions.
       </Text>
@@ -232,7 +263,7 @@ export default function ExploreScreen() {
         <View style={styles.flex}>
           <View style={styles.searchRow}>
             <TextInput
-              accessibilityLabel="Search trips by destination"
+              accessibilityLabel="Search active trips by destination"
               style={styles.input}
               placeholder="Where are you going?"
               placeholderTextColor="#9299A8"
@@ -241,6 +272,7 @@ export default function ExploreScreen() {
               onSubmitEditing={() => searchDestination(search)}
               returnKeyType="search"
             />
+
             <TouchableOpacity
               style={styles.searchButton}
               onPress={() => searchDestination(search)}
@@ -252,16 +284,21 @@ export default function ExploreScreen() {
           {destination ? (
             <View style={styles.resultsHeader}>
               <View style={styles.flex}>
-                <Text style={styles.label}>TRIPS GOING TO</Text>
-                <Text style={styles.resultsTitle}>{destination}</Text>
+                <Text style={styles.label}>
+                  ACTIVE TRIPS GOING TO
+                </Text>
+                <Text style={styles.resultsTitle}>
+                  {destination}
+                </Text>
               </View>
+
               <TouchableOpacity onPress={clearSearch}>
                 <Text style={styles.link}>Clear</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <Text style={styles.sectionTitle}>
-              Destinations from Recent Trips
+              Destinations with Active Trips
             </Text>
           )}
 
@@ -273,6 +310,7 @@ export default function ExploreScreen() {
           ) : error ? (
             <View style={styles.empty}>
               <Text style={styles.error}>{error}</Text>
+
               <TouchableOpacity
                 onPress={() => setRefresh((current) => current + 1)}
               >
@@ -282,15 +320,18 @@ export default function ExploreScreen() {
           ) : destination ? (
             <FlatList
               key="trips"
-              data={trips}
+              data={trips.filter((trip) => trip.end_date >= today)}
               keyExtractor={(item) => item.id}
               renderItem={renderTrip}
               contentContainerStyle={styles.list}
+              showsVerticalScrollIndicator={false}
               ListEmptyComponent={
                 <View style={styles.empty}>
-                  <Text style={styles.cardTitle}>No trips found</Text>
+                  <Text style={styles.cardTitle}>
+                    No active trips found
+                  </Text>
                   <Text style={styles.secondary}>
-                    Try another destination.
+                    Try another destination. Completed trips are hidden here.
                   </Text>
                 </View>
               }
@@ -314,9 +355,11 @@ export default function ExploreScreen() {
               )}
               ListEmptyComponent={
                 <View style={styles.empty}>
-                  <Text style={styles.cardTitle}>No destinations yet</Text>
+                  <Text style={styles.cardTitle}>
+                    No active trips yet
+                  </Text>
                   <Text style={styles.secondary}>
-                    Create a trip to see destinations here.
+                    Create a new trip to see its destination here.
                   </Text>
                 </View>
               }
@@ -336,7 +379,11 @@ const styles = StyleSheet.create({
     paddingTop: 28,
   },
   flex: { flex: 1 },
-  title: { fontSize: 29, fontWeight: '800', color: '#F7F8FC' },
+  title: {
+    fontSize: 29,
+    fontWeight: '800',
+    color: '#F7F8FC',
+  },
   subtitle: {
     color: '#9299A8',
     marginTop: 7,
@@ -359,7 +406,10 @@ const styles = StyleSheet.create({
   activeTab: { backgroundColor: '#4F8CFF' },
   tabText: { color: '#9299A8', fontWeight: '700' },
   activeTabText: { color: '#FFFFFF' },
-  searchRow: { flexDirection: 'row', marginBottom: 20 },
+  searchRow: {
+    flexDirection: 'row',
+    marginBottom: 20,
+  },
   input: {
     flex: 1,
     color: '#F7F8FC',
@@ -407,7 +457,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#252A37',
   },
-  destinationIcon: { fontSize: 22, marginBottom: 10 },
+  destinationIcon: {
+    fontSize: 22,
+    marginBottom: 10,
+  },
   card: {
     backgroundColor: '#151821',
     borderRadius: 18,
@@ -416,14 +469,45 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#252A37',
   },
-  cardTitle: { color: '#F7F8FC', fontSize: 17, fontWeight: '700' },
-  secondary: { color: '#9299A8', marginTop: 7, lineHeight: 20 },
-  divider: { height: 1, backgroundColor: '#292E3B', marginVertical: 16 },
-  dateRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  label: { color: '#858D9D', fontSize: 10, fontWeight: '700' },
-  value: { color: '#D7DBE5', fontSize: 13, marginTop: 6 },
-  smallTitle: { color: '#F7F8FC', fontWeight: '700', marginBottom: 10 },
-  placeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 7 },
+  cardTitle: {
+    color: '#F7F8FC',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  secondary: {
+    color: '#9299A8',
+    marginTop: 7,
+    lineHeight: 20,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#292E3B',
+    marginVertical: 16,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  label: {
+    color: '#858D9D',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  value: {
+    color: '#D7DBE5',
+    fontSize: 13,
+    marginTop: 6,
+  },
+  smallTitle: {
+    color: '#F7F8FC',
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  placeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 7,
+  },
   checkbox: {
     width: 19,
     height: 19,
@@ -434,11 +518,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 9,
   },
-  checked: { backgroundColor: '#4F8CFF', borderColor: '#4F8CFF' },
-  checkmark: { color: '#FFFFFF', fontSize: 12 },
-  placeName: { flex: 1, color: '#D7DBE5', fontSize: 13 },
-  visited: { color: '#777F90', textDecorationLine: 'line-through' },
-  link: { color: '#75A2FF', fontWeight: '700', marginTop: 12 },
-  empty: { padding: 24, alignItems: 'center' },
-  error: { color: '#FF9B9B', textAlign: 'center' },
+  checked: {
+    backgroundColor: '#4F8CFF',
+    borderColor: '#4F8CFF',
+  },
+  checkmark: {
+    color: '#FFFFFF',
+    fontSize: 12,
+  },
+  placeName: {
+    flex: 1,
+    color: '#D7DBE5',
+    fontSize: 13,
+  },
+  visited: {
+    color: '#777F90',
+    textDecorationLine: 'line-through',
+  },
+  link: {
+    color: '#75A2FF',
+    fontWeight: '700',
+    marginTop: 12,
+  },
+  empty: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  error: {
+    color: '#FF9B9B',
+    textAlign: 'center',
+  },
 });

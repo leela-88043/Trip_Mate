@@ -1,5 +1,4 @@
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -8,11 +7,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 
 import ProfileButton from '@/components/ProfileButton';
 import ProfilePanel from '@/components/ProfilePanel';
+import { useTripToday } from '@/hooks/useTripToday';
 import { supabase } from '@/services/supabase';
 import { getMyTrips } from '@/services/trips';
+import { isActiveTrip } from '@/utils/tripTimeline';
 
 type Trip = {
   id: string;
@@ -23,17 +25,21 @@ type Trip = {
 };
 
 export default function HomeScreen() {
+  const today = useTripToday();
+
   const [fullName, setFullName] = useState('Traveler');
   const [email, setEmail] = useState('');
-  const [upcomingTrip, setUpcomingTrip] = useState<Trip | null>(null);
+  const [allTrips, setAllTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileVisible, setProfileVisible] = useState(false);
 
-  useEffect(() => {
-    void loadDashboard();
-  }, []);
+  const upcomingTrip =
+    allTrips
+      .filter((trip) => isActiveTrip(trip, today))
+      .sort((a, b) => a.start_date.localeCompare(b.start_date))[0] ??
+    null;
 
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     setLoading(true);
 
     try {
@@ -42,6 +48,9 @@ export default function HomeScreen() {
       } = await supabase.auth.getUser();
 
       if (!user) {
+        setAllTrips([]);
+        setFullName('Traveler');
+        setEmail('');
         return;
       }
 
@@ -70,25 +79,36 @@ export default function HomeScreen() {
         setFullName('Traveler');
       }
 
-      if (user.email) {
-        setEmail(user.email);
-      } else if (profile?.email) {
-        setEmail(profile.email);
+      setEmail(user.email || profile?.email || '');
+
+      const { data, error: tripsError } = await getMyTrips(user.id);
+
+      if (tripsError) {
+        throw new Error(tripsError.message);
       }
 
-      const { data } = await getMyTrips(user.id);
+      const rows = (data ?? []) as unknown as {
+        trips: Trip | Trip[] | null;
+      }[];
 
-      const trips = (data ?? [])
-        .map((item) => item.trips)
-        .filter(Boolean) as Trip[];
+      const trips = rows.flatMap((row) => {
+        if (!row.trips) return [];
+        return Array.isArray(row.trips) ? row.trips : [row.trips];
+      });
 
-      setUpcomingTrip(trips[0] ?? null);
+      setAllTrips(trips);
     } catch (error) {
       console.error('Dashboard loading error:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadDashboard();
+    }, [loadDashboard])
+  );
 
   if (loading) {
     return (
@@ -109,7 +129,6 @@ export default function HomeScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>
@@ -127,7 +146,6 @@ export default function HomeScreen() {
           />
         </View>
 
-        {/* Upcoming trip */}
         <Text style={styles.sectionTitle}>
           Your Trip
         </Text>
@@ -166,7 +184,6 @@ export default function HomeScreen() {
                 <Text style={styles.dateLabel}>
                   START
                 </Text>
-
                 <Text style={styles.dateValue}>
                   {upcomingTrip.start_date}
                 </Text>
@@ -176,7 +193,6 @@ export default function HomeScreen() {
                 <Text style={styles.dateLabel}>
                   END
                 </Text>
-
                 <Text style={styles.dateValue}>
                   {upcomingTrip.end_date}
                 </Text>
@@ -194,16 +210,16 @@ export default function HomeScreen() {
             </Text>
 
             <Text style={styles.emptyTitle}>
-              No trips yet
+              No active trips
             </Text>
 
             <Text style={styles.emptyText}>
-              Create your first trip and start planning your journey.
+              Create a new trip to plan your next journey.
+              Completed trips are available in My Trips.
             </Text>
           </View>
         )}
 
-        {/* Trip Mate features */}
         <Text style={styles.sectionTitle}>
           Trip Mate Features
         </Text>
@@ -260,7 +276,6 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      {/* Profile panel */}
       <ProfilePanel
         visible={profileVisible}
         fullName={fullName}
@@ -276,47 +291,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#08090D',
   },
-
   container: {
     flex: 1,
   },
-
   content: {
     padding: 24,
     paddingBottom: 40,
   },
-
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#08090D',
   },
-
   loadingText: {
     marginTop: 10,
     color: '#9299A8',
   },
-
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
   },
-
   greeting: {
     fontSize: 15,
     color: '#9299A8',
   },
-
   name: {
     fontSize: 26,
     fontWeight: '700',
     color: '#F7F8FC',
     marginTop: 4,
   },
-
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
@@ -324,7 +331,6 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     marginTop: 8,
   },
-
   tripCard: {
     backgroundColor: '#151821',
     borderRadius: 18,
@@ -333,12 +339,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#252A37',
   },
-
   tripTop: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-
   destinationIcon: {
     width: 52,
     height: 52,
@@ -347,58 +351,48 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-
   destinationIconText: {
     fontSize: 23,
   },
-
   tripInfo: {
     marginLeft: 14,
     flex: 1,
   },
-
   tripName: {
     fontSize: 19,
     fontWeight: '700',
     color: '#F7F8FC',
   },
-
   destination: {
     fontSize: 15,
     color: '#9299A8',
     marginTop: 4,
   },
-
   tripDivider: {
     height: 1,
     backgroundColor: '#252A37',
     marginVertical: 18,
   },
-
   dateRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-
   dateLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: '#858D9D',
   },
-
   dateValue: {
     fontSize: 14,
     color: '#D9DDE7',
     marginTop: 4,
   },
-
   viewTrip: {
     color: '#4F8CFF',
     fontSize: 14,
     fontWeight: '700',
     marginTop: 18,
   },
-
   emptyCard: {
     backgroundColor: '#151821',
     borderRadius: 18,
@@ -408,25 +402,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#252A37',
   },
-
   emptyIcon: {
     fontSize: 40,
   },
-
   emptyTitle: {
     fontSize: 19,
     fontWeight: '700',
     color: '#F7F8FC',
     marginTop: 10,
   },
-
   emptyText: {
     textAlign: 'center',
     color: '#9299A8',
     marginTop: 6,
     lineHeight: 21,
   },
-
   featureCard: {
     backgroundColor: '#151821',
     borderRadius: 16,
@@ -436,22 +426,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#252A37',
   },
-
   featureIcon: {
     fontSize: 28,
     marginRight: 15,
   },
-
   featureContent: {
     flex: 1,
   },
-
   featureTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: '#F7F8FC',
   },
-
   featureText: {
     fontSize: 13,
     color: '#9299A8',

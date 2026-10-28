@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getTodayKey } from '@/utils/tripTimeline';
 
 export async function createTrip(
   name: string,
@@ -47,6 +48,7 @@ export async function deleteTrip(
     .delete()
     .eq('id', tripId)
     .eq('created_by', userId)
+    .lt('end_date', getTodayKey())
     .select()
     .maybeSingle();
 
