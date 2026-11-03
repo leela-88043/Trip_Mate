@@ -15,7 +15,7 @@ import ProfilePointsBar from '@/components/ProfilePointsBar';
 import {
   loadProfilePoints,
   type ProfilePoints,
-} from '@/services/ProfilePoints';
+} from '@/services/profilePoints';
 import { supabase } from '@/services/supabase';
 
 export default function MyProfileScreen() {

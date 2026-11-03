@@ -12,6 +12,20 @@ import { router } from 'expo-router';
 
 import { supabase } from '@/services/supabase';
 import { createTrip } from '@/services/trip';
+import { getTodayKey } from '@/utils/tripTimeline';
+
+function isValidDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const parsed = new Date(`${value}T00:00:00Z`);
+
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+}
 
 export default function CreateTripScreen() {
   const [name, setName] = useState('');
@@ -20,40 +34,73 @@ export default function CreateTripScreen() {
   const [endDate, setEndDate] = useState('');
   const [places, setPlaces] = useState(['']);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const addPlace = () => {
-    setPlaces((currentPlaces) => [...currentPlaces, '']);
-  };
+  function showError(title: string, message: string) {
+    setErrorMessage(message);
+    Alert.alert(title, message);
+  }
 
-  const updatePlace = (index: number, value: string) => {
-    setPlaces((currentPlaces) =>
-      currentPlaces.map((place, placeIndex) =>
+  function addPlace() {
+    setPlaces((current) => [...current, '']);
+  }
+
+  function updatePlace(index: number, value: string) {
+    setPlaces((current) =>
+      current.map((place, placeIndex) =>
         placeIndex === index ? value : place
       )
     );
-  };
+  }
 
-  const removePlace = (index: number) => {
-    if (places.length === 1) {
-      setPlaces(['']);
+  function removePlace(index: number) {
+    setPlaces((current) =>
+      current.length === 1
+        ? ['']
+        : current.filter((_, placeIndex) => placeIndex !== index)
+    );
+  }
+
+  async function handleCreateTrip() {
+    if (loading) return;
+
+    setErrorMessage('');
+
+    const tripName = name.trim();
+    const tripDestination = destination.trim();
+    const start = startDate.trim();
+    const end = endDate.trim();
+
+    if (!tripName || !tripDestination || !start || !end) {
+      showError(
+        'Missing information',
+        'Please enter the trip name, destination, start date, and end date.'
+      );
       return;
     }
 
-    setPlaces((currentPlaces) =>
-      currentPlaces.filter((_, placeIndex) => placeIndex !== index)
-    );
-  };
+    if (!isValidDate(start) || !isValidDate(end)) {
+      showError(
+        'Invalid dates',
+        'Please enter valid dates in YYYY-MM-DD format.'
+      );
+      return;
+    }
 
-  const handleCreateTrip = async () => {
-    if (
-      !name.trim() ||
-      !destination.trim() ||
-      !startDate.trim() ||
-      !endDate.trim()
-    ) {
-      Alert.alert(
-        'Missing information',
-        'Please fill in all fields.'
+    if (end < start) {
+      showError(
+        'Invalid date range',
+        'The end date must be on or after the start date.'
+      );
+      return;
+    }
+
+    const today = getTodayKey();
+
+    if (end < today) {
+      showError(
+        'Trip dates have already passed',
+        `This trip would already be completed because its end date is before today (${today}). Please select an end date of today or later.`
       );
       return;
     }
@@ -63,73 +110,88 @@ export default function CreateTripScreen() {
       .filter(Boolean);
 
     if (cleanedPlaces.length === 0) {
-      Alert.alert(
+      showError(
         'Missing places',
         'Please add at least one place to visit.'
       );
       return;
     }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      Alert.alert('Login Required', 'Please login first.');
-      return;
-    }
-
     setLoading(true);
 
-    const { data, error } = await createTrip(
-      name.trim(),
-      destination.trim(),
-      startDate.trim(),
-      endDate.trim(),
-      user.id
-    );
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-    if (error || !data) {
+      if (authError) {
+        throw new Error(authError.message);
+      }
+
+      if (!user) {
+        showError('Login Required', 'Please log in first.');
+        return;
+      }
+
+      // Recheck in case the India date changed while checking login.
+      if (end < getTodayKey()) {
+        showError(
+          'Trip dates have already passed',
+          'This trip has already ended. Please update your travel dates.'
+        );
+        return;
+      }
+
+      const { data, error } = await createTrip(
+        tripName,
+        tripDestination,
+        start,
+        end,
+        user.id
+      );
+
+      if (error || !data) {
+        throw new Error(error?.message || 'Failed to create trip.');
+      }
+
+      const { error: placesError } = await supabase
+        .from('trip_destinations')
+        .insert(
+          cleanedPlaces.map((place) => ({
+            trip_id: data.id,
+            name: place,
+            visited: false,
+          }))
+        );
+
+      if (placesError) {
+        showError(
+          'Places could not be saved',
+          `The trip was created, but its places could not be saved: ${placesError.message}. Check My Trips before creating another trip.`
+        );
+        return;
+      }
+
+      Alert.alert(
+        'Trip Created',
+        'Your trip has been created successfully!',
+        [
+          {
+            text: 'View My Trips',
+            onPress: () => router.replace('/my-trips'),
+          },
+        ]
+      );
+    } catch (error) {
+      showError(
+        'Unable to create trip',
+        error instanceof Error ? error.message : 'Please try again.'
+      );
+    } finally {
       setLoading(false);
-
-      Alert.alert(
-        'Error',
-        error?.message || 'Failed to create trip.'
-      );
-      return;
     }
-
-    const { error: placesError } = await supabase
-      .from('trip_destinations')
-      .insert(
-        cleanedPlaces.map((place) => ({
-          trip_id: data.id,
-          name: place,
-          visited: false,
-        }))
-      );
-
-    setLoading(false);
-
-    if (placesError) {
-      Alert.alert(
-        'Error',
-        `Trip was created, but places could not be saved: ${placesError.message}`
-      );
-      return;
-    }
-
-    Alert.alert(
-      'Trip Created',
-      'Your trip has been created successfully!',
-      [
-        {
-          text: 'View My Trips',
-          onPress: () => router.replace('/my-trips'),
-        },
-      ]
-    );
-  };
+  }
 
   return (
     <ScrollView
@@ -146,6 +208,7 @@ export default function CreateTripScreen() {
         placeholderTextColor="#9CA3AF"
         value={name}
         onChangeText={setName}
+        editable={!loading}
       />
 
       <Text style={styles.label}>Destination</Text>
@@ -155,6 +218,7 @@ export default function CreateTripScreen() {
         placeholderTextColor="#9CA3AF"
         value={destination}
         onChangeText={setDestination}
+        editable={!loading}
       />
 
       <Text style={styles.label}>Start Date</Text>
@@ -164,6 +228,10 @@ export default function CreateTripScreen() {
         placeholderTextColor="#9CA3AF"
         value={startDate}
         onChangeText={setStartDate}
+        editable={!loading}
+        autoCorrect={false}
+        autoCapitalize="none"
+        maxLength={10}
       />
 
       <Text style={styles.label}>End Date</Text>
@@ -173,7 +241,15 @@ export default function CreateTripScreen() {
         placeholderTextColor="#9CA3AF"
         value={endDate}
         onChangeText={setEndDate}
+        editable={!loading}
+        autoCorrect={false}
+        autoCapitalize="none"
+        maxLength={10}
       />
+
+      <Text style={styles.help}>
+        Dates follow India time. The end date must be today or later.
+      </Text>
 
       <Text style={styles.placesTitle}>Places to Visit</Text>
       <Text style={styles.placesSubtitle}>
@@ -188,11 +264,14 @@ export default function CreateTripScreen() {
             placeholderTextColor="#9CA3AF"
             value={place}
             onChangeText={(value) => updatePlace(index, value)}
+            editable={!loading}
           />
 
           <TouchableOpacity
+            accessibilityLabel={`Remove place ${index + 1}`}
             style={styles.removeButton}
             onPress={() => removePlace(index)}
+            disabled={loading}
           >
             <Text style={styles.removeButtonText}>×</Text>
           </TouchableOpacity>
@@ -202,15 +281,22 @@ export default function CreateTripScreen() {
       <TouchableOpacity
         style={styles.addButton}
         onPress={addPlace}
+        disabled={loading}
       >
         <Text style={styles.addButtonText}>
           + Add another place
         </Text>
       </TouchableOpacity>
 
+      {!!errorMessage && (
+        <Text accessibilityLiveRegion="polite" style={styles.error}>
+          {errorMessage}
+        </Text>
+      )}
+
       <TouchableOpacity
-        style={styles.button}
-        onPress={handleCreateTrip}
+        style={[styles.button, loading && styles.disabled]}
+        onPress={() => void handleCreateTrip()}
         disabled={loading}
       >
         <Text style={styles.buttonText}>
@@ -254,6 +340,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 15,
     color: '#F7F8FC',
+  },
+  help: {
+    color: '#9299A8',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 10,
   },
   placesTitle: {
     fontSize: 19,
@@ -323,14 +415,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 30,
-    shadowColor: '#4F8CFF',
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 3,
   },
   buttonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '800',
+  },
+  disabled: {
+    opacity: 0.6,
+  },
+  error: {
+    color: '#FF9B9B',
+    marginTop: 18,
+    lineHeight: 21,
   },
 });

@@ -1,19 +1,16 @@
 import { useEffect, useState } from 'react';
-
 import {
   ActivityIndicator,
   StyleSheet,
   View,
 } from 'react-native';
-
 import {
   Stack,
   router,
   useSegments,
   useRootNavigationState,
 } from 'expo-router';
-
-import { Session } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 
 import { supabase } from '@/services/supabase';
 
@@ -24,7 +21,6 @@ export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
-  // Check authentication session
   useEffect(() => {
     let mounted = true;
 
@@ -37,7 +33,7 @@ export default function RootLayout() {
       }
     });
 
-    const checkSession = async () => {
+    async function checkSession() {
       const { data, error } = await supabase.auth.getSession();
 
       if (!mounted) return;
@@ -48,9 +44,9 @@ export default function RootLayout() {
 
       setSession(data.session);
       setCheckingAuth(false);
-    };
+    }
 
-    checkSession();
+    void checkSession();
 
     return () => {
       mounted = false;
@@ -58,7 +54,6 @@ export default function RootLayout() {
     };
   }, []);
 
-  // Authentication-based navigation
   useEffect(() => {
     if (checkingAuth || !navigationState?.key) {
       return;
@@ -86,14 +81,21 @@ export default function RootLayout() {
   return (
     <View style={styles.container}>
       <Stack
-          screenOptions={{
-            headerShown: true,
-            headerStyle: { backgroundColor: '#08090D' },
-            headerTintColor: '#F7F8FC',
-            headerTitleStyle: { color: '#F7F8FC', fontWeight: '700' },
-            contentStyle: { backgroundColor: '#08090D' },
-          }}
-        >
+        screenOptions={{
+          headerShown: true,
+          headerStyle: {
+            backgroundColor: '#08090D',
+          },
+          headerTintColor: '#F7F8FC',
+          headerTitleStyle: {
+            color: '#F7F8FC',
+            fontWeight: '700',
+          },
+          contentStyle: {
+            backgroundColor: '#08090D',
+          },
+        }}
+      >
         <Stack.Screen
           name="welcome"
           options={{ headerShown: false }}
@@ -130,6 +132,16 @@ export default function RootLayout() {
         />
 
         <Stack.Screen
+          name="travel-preferences"
+          options={{ title: 'Travel Preferences' }}
+        />
+
+        <Stack.Screen
+          name="companions"
+          options={{ title: 'Find Companions' }}
+        />
+
+        <Stack.Screen
           name="trip-test"
           options={{ title: 'Trip Test' }}
         />
@@ -150,16 +162,16 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#08090D',
   },
-
   loadingOverlay: {
-  position: 'absolute',
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-  justifyContent: 'center',
-  alignItems: 'center',
-  backgroundColor: '#08090D',
-},
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#08090D',
+  },
 });
