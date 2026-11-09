@@ -1,30 +1,19 @@
-import { supabase } from './supabase';
+import { supabase } from "./supabase";
 
-export async function joinTrip(
-  tripId: string,
-  userId: string
-) {
-  const { data, error } = await supabase
-    .from('trip_members')
-    .insert({
-      trip_id: tripId,
-      user_id: userId,
-    })
-    .select()
-    .single();
+export async function joinTrip(tripId: string, userId: string) {
+  const { error } = await supabase.rpc("join_trip_with_budget", {
+    p_trip_id: tripId,
+  });
 
-  return { data, error };
+  return { data: null, error };
 }
 
-export async function removeTripMember(
-  tripId: string,
-  userId: string
-) {
+export async function removeTripMember(tripId: string, userId: string) {
   const { data, error } = await supabase
-    .from('trip_members')
+    .from("trip_members")
     .delete()
-    .eq('trip_id', tripId)
-    .eq('user_id', userId)
+    .eq("trip_id", tripId)
+    .eq("user_id", userId)
     .select()
     .maybeSingle();
 
