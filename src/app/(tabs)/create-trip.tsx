@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
 import { supabase } from '@/services/supabase';
 import { createTrip } from '@/services/trip';
@@ -28,13 +28,37 @@ function isValidDate(value: string) {
 }
 
 export default function CreateTripScreen() {
+  const params = useLocalSearchParams<{
+    destination?: string | string[];
+    planningKey?: string | string[];
+  }>();
+
+  const incomingDestination = (
+    Array.isArray(params.destination)
+      ? params.destination[0]
+      : params.destination
+  )?.trim() ?? '';
+
+  const planningKey = Array.isArray(params.planningKey)
+    ? params.planningKey[0]
+    : params.planningKey;
+
   const [name, setName] = useState('');
-  const [destination, setDestination] = useState('');
+  const [destination, setDestination] = useState(incomingDestination);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [places, setPlaces] = useState(['']);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [createdTripId, setCreatedTripId] = useState<string | null>(null);
+
+  // Also handles opening another destination while this tab is mounted.
+  useEffect(() => {
+    if (incomingDestination) {
+      setDestination(incomingDestination);
+      setErrorMessage('');
+    }
+  }, [incomingDestination, planningKey]);
 
   function showError(title: string, message: string) {
     setErrorMessage(message);
@@ -61,8 +85,18 @@ export default function CreateTripScreen() {
     );
   }
 
+  function resetForm() {
+    setName('');
+    setDestination('');
+    setStartDate('');
+    setEndDate('');
+    setPlaces(['']);
+    setErrorMessage('');
+    setCreatedTripId(null);
+  }
+
   async function handleCreateTrip() {
-    if (loading) return;
+    if (loading || createdTripId) return;
 
     setErrorMessage('');
 
@@ -134,7 +168,6 @@ export default function CreateTripScreen() {
         return;
       }
 
-      // Recheck in case the India date changed while checking login.
       if (end < getTodayKey()) {
         showError(
           'Trip dates have already passed',
@@ -155,6 +188,9 @@ export default function CreateTripScreen() {
         throw new Error(error?.message || 'Failed to create trip.');
       }
 
+      // Prevent another submission if the trip exists but places fail.
+      setCreatedTripId(data.id);
+
       const { error: placesError } = await supabase
         .from('trip_destinations')
         .insert(
@@ -168,7 +204,7 @@ export default function CreateTripScreen() {
       if (placesError) {
         showError(
           'Places could not be saved',
-          `The trip was created, but its places could not be saved: ${placesError.message}. Check My Trips before creating another trip.`
+          `The trip was created, but its places could not be saved: ${placesError.message}. Open the created trip to manage its places.`
         );
         return;
       }
@@ -193,6 +229,8 @@ export default function CreateTripScreen() {
     }
   }
 
+  const formDisabled = loading || createdTripId !== null;
+
   return (
     <ScrollView
       style={styles.scrollView}
@@ -201,6 +239,10 @@ export default function CreateTripScreen() {
     >
       <Text style={styles.title}>Create Trip</Text>
 
+      <Text style={styles.help}>
+        Choose your destination, dates, and places to visit.
+      </Text>
+
       <Text style={styles.label}>Trip Name</Text>
       <TextInput
         style={styles.input}
@@ -208,7 +250,7 @@ export default function CreateTripScreen() {
         placeholderTextColor="#9CA3AF"
         value={name}
         onChangeText={setName}
-        editable={!loading}
+        editable={!formDisabled}
       />
 
       <Text style={styles.label}>Destination</Text>
@@ -218,7 +260,7 @@ export default function CreateTripScreen() {
         placeholderTextColor="#9CA3AF"
         value={destination}
         onChangeText={setDestination}
-        editable={!loading}
+        editable={!formDisabled}
       />
 
       <Text style={styles.label}>Start Date</Text>
@@ -228,7 +270,7 @@ export default function CreateTripScreen() {
         placeholderTextColor="#9CA3AF"
         value={startDate}
         onChangeText={setStartDate}
-        editable={!loading}
+        editable={!formDisabled}
         autoCorrect={false}
         autoCapitalize="none"
         maxLength={10}
@@ -241,7 +283,7 @@ export default function CreateTripScreen() {
         placeholderTextColor="#9CA3AF"
         value={endDate}
         onChangeText={setEndDate}
-        editable={!loading}
+        editable={!formDisabled}
         autoCorrect={false}
         autoCapitalize="none"
         maxLength={10}
@@ -264,14 +306,15 @@ export default function CreateTripScreen() {
             placeholderTextColor="#9CA3AF"
             value={place}
             onChangeText={(value) => updatePlace(index, value)}
-            editable={!loading}
+            editable={!formDisabled}
           />
 
           <TouchableOpacity
+            accessibilityRole="button"
             accessibilityLabel={`Remove place ${index + 1}`}
             style={styles.removeButton}
             onPress={() => removePlace(index)}
-            disabled={loading}
+            disabled={formDisabled}
           >
             <Text style={styles.removeButtonText}>×</Text>
           </TouchableOpacity>
@@ -279,13 +322,12 @@ export default function CreateTripScreen() {
       ))}
 
       <TouchableOpacity
+        accessibilityRole="button"
         style={styles.addButton}
         onPress={addPlace}
-        disabled={loading}
+        disabled={formDisabled}
       >
-        <Text style={styles.addButtonText}>
-          + Add another place
-        </Text>
+        <Text style={styles.addButtonText}>+ Add another place</Text>
       </TouchableOpacity>
 
       {!!errorMessage && (
@@ -294,15 +336,46 @@ export default function CreateTripScreen() {
         </Text>
       )}
 
-      <TouchableOpacity
-        style={[styles.button, loading && styles.disabled]}
-        onPress={() => void handleCreateTrip()}
-        disabled={loading}
-      >
-        <Text style={styles.buttonText}>
-          {loading ? 'Creating...' : 'Create Trip'}
-        </Text>
-      </TouchableOpacity>
+      {createdTripId ? (
+        <View style={styles.createdCard}>
+          <Text style={styles.createdText}>
+            Your trip has been created.
+          </Text>
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            style={[styles.button, loading && styles.disabled]}
+            disabled={loading}
+            onPress={() =>
+              router.push(`/trip-details?tripId=${createdTripId}`)
+            }
+          >
+            <Text style={styles.buttonText}>Open Created Trip</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            style={styles.resetButton}
+            disabled={loading}
+            onPress={resetForm}
+          >
+            <Text style={styles.addButtonText}>
+              Start Another Trip
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity
+          accessibilityRole="button"
+          style={[styles.button, loading && styles.disabled]}
+          onPress={() => void handleCreateTrip()}
+          disabled={loading}
+        >
+          <Text style={styles.buttonText}>
+            {loading ? 'Creating...' : 'Create Trip'}
+          </Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
@@ -428,5 +501,18 @@ const styles = StyleSheet.create({
     color: '#FF9B9B',
     marginTop: 18,
     lineHeight: 21,
+  },
+  createdCard: {
+    marginTop: 20,
+  },
+  createdText: {
+    color: '#83DCAA',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  resetButton: {
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 8,
   },
 });

@@ -1,7 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -9,24 +8,29 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import {
+  router,
+  useFocusEffect,
+  useLocalSearchParams,
+} from 'expo-router';
 
 import { supabase } from '@/services/supabase';
-import {
-  joinTrip,
-  removeTripMember,
-} from '@/services/tripMembers';
+import { joinTrip, removeTripMember } from '@/services/tripMembers';
 import { deleteTrip } from '@/services/trip';
+import { confirmTripParticipation } from '@/services/profilePoints';
 import { useTripToday } from '@/hooks/useTripToday';
-import { getTodayKey, getTripStatus } from '@/utils/tripTimeline';
+import {
+  getTodayKey,
+  getTripStatus as getTimelineTripStatus,
+} from '@/utils/tripTimeline';
 
 type Trip = {
   id: string;
   name: string;
   destination: string;
-  start_date: string;
-  end_date: string;
-  created_by: string;
+  start_date: string | null;
+  end_date: string | null;
+  created_by: string | null;
 };
 
 type TripDestination = {
@@ -36,329 +40,428 @@ type TripDestination = {
   visited: boolean;
 };
 
+type MemberProfile = {
+  full_name: string | null;
+  email: string | null;
+};
+
+type Member = {
+  user_id: string;
+  role: string | null;
+  profiles: MemberProfile | null;
+};
+
+type MemberRow = {
+  user_id: string | null;
+  role: string | null;
+  profiles: MemberProfile | MemberProfile[] | null;
+};
+
+type Confirmation = {
+  user_id: string;
+  confirmed_at: string;
+};
+
+type PendingAction =
+  | { kind: 'delete' }
+  | { kind: 'confirm'; member: Member }
+  | { kind: 'remove'; member: Member }
+  | null;
+
+// Safely handles nullable database dates before calling the utility.
+function getTripStatus(trip: Trip, today: string) {
+  if (!trip.start_date || !trip.end_date) {
+    return 'unknown';
+  }
+
+  return getTimelineTripStatus(
+    {
+      start_date: trip.start_date,
+      end_date: trip.end_date,
+    },
+    today
+  );
+}
+
+function memberName(member: Member) {
+  return member.profiles?.full_name || 'Traveller';
+}
+
 export default function TripDetailsScreen() {
-  const { tripId } = useLocalSearchParams();
+  const params = useLocalSearchParams<{
+    tripId?: string | string[];
+  }>();
+
+  const tripId = Array.isArray(params.tripId)
+    ? params.tripId[0]
+    : params.tripId;
+
   const today = useTripToday();
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleteError, setDeleteError] = useState('');
 
   const [trip, setTrip] = useState<Trip | null>(null);
-  const [members, setMembers] = useState<any[]>([]);
-  const [destinations, setDestinations] = useState<
-    TripDestination[]
-  >([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [destinations, setDestinations] =
+    useState<TripDestination[]>([]);
+  const [confirmations, setConfirmations] =
+    useState<Confirmation[]>([]);
 
+  const [currentUserId, setCurrentUserId] = useState('');
   const [loading, setLoading] = useState(true);
-  const [joining, setJoining] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [removingMember, setRemovingMember] =
-    useState<string | null>(null);
-  const [updatingPlace, setUpdatingPlace] =
-    useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] =
-    useState('');
+  const [loadError, setLoadError] = useState('');
+  const [confirmationError, setConfirmationError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [message, setMessage] = useState('');
+  const [pendingAction, setPendingAction] =
+    useState<PendingAction>(null);
+  const [busy, setBusy] = useState('');
+
+  const actionLock = useRef(false);
 
   const loadTrip = useCallback(async () => {
     setLoading(true);
-    if (!tripId) {
-      Alert.alert(
-        'Error',
-        'Trip ID is missing.'
-      );
-      setLoading(false);
-      return;
-    }
+    setLoadError('');
+    setConfirmationError('');
+    setTrip(null);
+    setMembers([]);
+    setDestinations([]);
+    setConfirmations([]);
+    setCurrentUserId('');
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      if (!tripId) {
+        throw new Error('Trip ID is missing.');
+      }
 
-    if (user) {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      if (authError) throw new Error(authError.message);
+      if (!user) throw new Error('Please log in to view this trip.');
+
       setCurrentUserId(user.id);
-    }
 
-    const { data, error } = await supabase
-      .from('trips')
-      .select(
-        'id, name, destination, start_date, end_date, created_by'
-      )
-      .eq('id', String(tripId))
-      .maybeSingle();
-
-    if (error) {
-      Alert.alert(
-        'Trip Loading Error',
-        error.message
-      );
-      setLoading(false);
-      return;
-    }
-
-    if (!data) {
-      Alert.alert(
-        'Trip Not Found',
-        'This trip could not be found.'
-      );
-      setLoading(false);
-      return;
-    }
-
-    setTrip(data);
-
-    const {
-      data: destinationData,
-      error: destinationError,
-    } = await supabase
-      .from('trip_destinations')
-      .select(
-        'id, trip_id, name, visited'
-      )
-      .eq('trip_id', String(tripId))
-      .order('created_at', {
-        ascending: true,
-      });
-
-    if (destinationError) {
-      console.log(
-        'Destination error:',
-        destinationError.message
-      );
-    } else {
-      setDestinations(
-        destinationData ?? []
-      );
-    }
-
-    const {
-      data: memberData,
-      error: memberError,
-    } = await supabase
-      .from('trip_members')
-      .select(`
-        user_id,
-        role,
-        profiles (
-          full_name,
-          email
+      const { data: tripData, error: tripError } = await supabase
+        .from('trips')
+        .select(
+          'id, name, destination, start_date, end_date, created_by'
         )
-      `)
-      .eq('trip_id', String(tripId));
+        .eq('id', tripId)
+        .maybeSingle();
 
-    if (memberError) {
-      console.log(
-        'Member error:',
-        memberError.message
+      if (tripError) throw new Error(tripError.message);
+      if (!tripData) throw new Error('This trip could not be found.');
+
+      const [
+        destinationResult,
+        memberResult,
+        confirmationResult,
+      ] = await Promise.all([
+        supabase
+          .from('trip_destinations')
+          .select('id, trip_id, name, visited')
+          .eq('trip_id', tripId)
+          .order('created_at', { ascending: true }),
+
+        supabase
+          .from('trip_members')
+          .select('user_id, role, profiles(full_name, email)')
+          .eq('trip_id', tripId),
+
+        supabase
+          .from('trip_participation_confirmations')
+          .select('user_id, confirmed_at')
+          .eq('trip_id', tripId),
+      ]);
+
+      if (destinationResult.error) {
+        throw new Error(destinationResult.error.message);
+      }
+
+      if (memberResult.error) {
+        throw new Error(memberResult.error.message);
+      }
+
+      const rows =
+        (memberResult.data ?? []) as unknown as MemberRow[];
+
+      const normalizedMembers: Member[] = [];
+
+      for (const row of rows) {
+        if (!row.user_id) continue;
+
+        normalizedMembers.push({
+          user_id: row.user_id,
+          role: row.role,
+          profiles: Array.isArray(row.profiles)
+            ? row.profiles[0] ?? null
+            : row.profiles,
+        });
+      }
+
+      setTrip(tripData);
+      setDestinations(destinationResult.data ?? []);
+      setMembers(normalizedMembers);
+
+      if (confirmationResult.error) {
+        setConfirmationError(confirmationResult.error.message);
+      } else {
+        setConfirmations(confirmationResult.data ?? []);
+      }
+    } catch (err) {
+      setLoadError(
+        err instanceof Error ? err.message : 'Unable to load trip.'
       );
-    } else {
-      setMembers(memberData ?? []);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }, [tripId]);
 
-  useFocusEffect(useCallback(() => {
-    void loadTrip();
-  }, [loadTrip]));
+  useFocusEffect(
+    useCallback(() => {
+      void loadTrip();
+    }, [loadTrip])
+  );
 
-  const handleTogglePlace = async (
-    place: TripDestination
-  ) => {
-    setUpdatingPlace(place.id);
+  const status = trip ? getTripStatus(trip, today) : 'unknown';
 
-    const newVisited = !place.visited;
+  const isOwner =
+    !!currentUserId && currentUserId === trip?.created_by;
 
-    const { error } = await supabase
-      .from('trip_destinations')
-      .update({
-        visited: newVisited,
-      })
-      .eq('id', place.id);
+  const isMember = members.some(
+    (member) => member.user_id === currentUserId
+  );
 
-    setUpdatingPlace(null);
+  const completed = status === 'completed';
+  const canJoin = status === 'upcoming' || status === 'ongoing';
 
-    if (error) {
-      Alert.alert(
-        'Update Failed',
-        error.message
+  const visitedCount = destinations.filter(
+    (place) => place.visited
+  ).length;
+
+  function isConfirmed(userId: string) {
+    return confirmations.some((item) => item.user_id === userId);
+  }
+
+  function openAction(action: PendingAction) {
+    if (actionLock.current) return;
+
+    setActionError('');
+    setMessage('');
+    setPendingAction(action);
+  }
+
+  async function handleTogglePlace(place: TripDestination) {
+    if (actionLock.current) return;
+
+    actionLock.current = true;
+    setBusy(`place-${place.id}`);
+    setActionError('');
+    setMessage('');
+
+    try {
+      const newVisited = !place.visited;
+
+      const { data, error } = await supabase
+        .from('trip_destinations')
+        .update({ visited: newVisited })
+        .eq('id', place.id)
+        .eq('trip_id', place.trip_id)
+        .select('id')
+        .maybeSingle();
+
+      if (error) throw new Error(error.message);
+
+      if (!data) {
+        throw new Error(
+          'The place could not be updated. Check your permissions.'
+        );
+      }
+
+      setDestinations((current) =>
+        current.map((item) =>
+          item.id === place.id
+            ? { ...item, visited: newVisited }
+            : item
+        )
       );
-      return;
-    }
-
-    setDestinations((current) =>
-      current.map((item) =>
-        item.id === place.id
-          ? {
-              ...item,
-              visited: newVisited,
-            }
-          : item
-      )
-    );
-  };
-
-  const handleJoinTrip = async () => {
-    if (trip && getTripStatus(trip, getTodayKey()) === 'completed') {
-      Alert.alert('Trip Completed', 'This trip has already ended.');
-      return;
-    }
-    if (!tripId) {
-      Alert.alert(
-        'Error',
-        'Trip ID is missing.'
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : 'Unable to update place.'
       );
-      return;
+    } finally {
+      setBusy('');
+      actionLock.current = false;
     }
+  }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  async function handleJoinTrip() {
+    if (!trip || actionLock.current) return;
 
-    if (!user) {
-      Alert.alert(
-        'Login Required',
-        'Please login first.'
+    actionLock.current = true;
+    setBusy('join');
+    setActionError('');
+    setMessage('');
+
+    try {
+      const currentStatus = getTripStatus(trip, getTodayKey());
+
+      if (
+        currentStatus !== 'upcoming' &&
+        currentStatus !== 'ongoing'
+      ) {
+        throw new Error(
+          'Only upcoming or ongoing trips can be joined.'
+        );
+      }
+
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      if (authError) throw new Error(authError.message);
+      if (!user) throw new Error('Please log in first.');
+
+      const { error } = await joinTrip(trip.id, user.id);
+
+      if (error) throw new Error(error.message);
+
+      await loadTrip();
+      setMessage('You have joined this trip.');
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : 'Unable to join trip.'
       );
-      return;
+    } finally {
+      setBusy('');
+      actionLock.current = false;
     }
+  }
 
-    setJoining(true);
+  async function handleConfirmedAction() {
+    if (!trip || !pendingAction || actionLock.current) return;
 
-    const { error } = await joinTrip(
-      String(tripId),
-      user.id
-    );
+    const action = pendingAction;
 
-    setJoining(false);
+    actionLock.current = true;
+    setBusy(action.kind);
+    setActionError('');
+    setMessage('');
 
-    if (error) {
-      Alert.alert(
-        'Join Failed',
-        error.message
-      );
-      return;
-    }
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-    Alert.alert(
-      'Success',
-      'You have joined this trip!'
-    );
+      if (authError) throw new Error(authError.message);
+      if (!user) throw new Error('Please log in first.');
 
-    loadTrip();
-  };
+      if (trip.created_by !== user.id) {
+        throw new Error('Only the trip organiser can do this.');
+      }
 
-    const handleDeleteTrip = () => {
-        if (!trip || trip.created_by !== currentUserId || getTripStatus(trip, getTodayKey()) !== 'completed') {
-            setDeleteError('Only the owner can delete a completed trip.');
-            return;
+      const currentlyCompleted =
+        getTripStatus(trip, getTodayKey()) === 'completed';
+
+      if (action.kind === 'delete') {
+        if (!currentlyCompleted) {
+          throw new Error('Only completed trips can be deleted.');
         }
-        setDeleteError('');
-        setConfirmDelete(true);
-    };
-    const confirmDeleteTrip = async () => {
-        if (!trip || deleting)
-            return;
-        setDeleting(true);
-        setDeleteError('');
-        try {
-            const { data: { user }, error: authError } = await supabase.auth.getUser();
-            if (authError)
-                throw new Error(authError.message);
-            if (!user)
-                throw new Error('Please log in first.');
-            if (trip.created_by !== user.id || getTripStatus(trip, getTodayKey()) !== 'completed') {
-                throw new Error('Only the owner can delete a completed trip.');
-            }
-            const { data, error } = await deleteTrip(trip.id, user.id);
-            if (error)
-                throw new Error(error.message);
-            if (!data)
-                throw new Error('Trip was not deleted. Refresh to check its dates and ownership.');
-            setConfirmDelete(false);
-            router.replace('/my-trips');
-        }
-        catch (error) {
-            setDeleteError(error instanceof Error ? error.message : 'Unable to delete trip.');
-        }
-        finally {
-            setDeleting(false);
-        }
-    };
 
-  const handleRemoveMember = (
-    memberUserId: string,
-    memberName: string
-  ) => {
-    if (!tripId) {
-      Alert.alert(
-        'Error',
-        'Trip ID is missing.'
+        const { data, error } = await deleteTrip(trip.id, user.id);
+
+        if (error) throw new Error(error.message);
+
+        if (!data) {
+          throw new Error(
+            'Trip was not deleted. Refresh its dates and ownership.'
+          );
+        }
+
+        setPendingAction(null);
+        router.replace('/my-trips');
+        return;
+      }
+
+      if (action.member.user_id === user.id) {
+        throw new Error(
+          'You cannot confirm or remove yourself as the organiser.'
+        );
+      }
+
+      if (action.kind === 'confirm') {
+        if (!currentlyCompleted) {
+          throw new Error(
+            'Participation can only be confirmed after the trip ends.'
+          );
+        }
+
+        await confirmTripParticipation(
+          trip.id,
+          action.member.user_id
+        );
+
+        setConfirmations((current) =>
+          current.some(
+            (item) => item.user_id === action.member.user_id
+          )
+            ? current
+            : [
+                ...current,
+                {
+                  user_id: action.member.user_id,
+                  confirmed_at: new Date().toISOString(),
+                },
+              ]
+        );
+
+        setMessage(
+          `Participation confirmed for ${memberName(action.member)}. Their profile points will reflect the award, subject to the participation cap.`
+        );
+      } else {
+        const { data, error } = await removeTripMember(
+          trip.id,
+          action.member.user_id
+        );
+
+        if (error) throw new Error(error.message);
+
+        if (!data) {
+          throw new Error('The member could not be removed.');
+        }
+
+        setMembers((current) =>
+          current.filter(
+            (member) => member.user_id !== action.member.user_id
+          )
+        );
+
+        setMessage(
+          `${memberName(action.member)} has been removed from the trip.`
+        );
+      }
+
+      setPendingAction(null);
+    } catch (err) {
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to complete this action.'
       );
-      return;
+    } finally {
+      setBusy('');
+      actionLock.current = false;
     }
-
-    if (memberUserId === currentUserId) {
-      Alert.alert(
-        'Cannot Remove Owner',
-        'You are the owner of this trip and cannot remove yourself.'
-      );
-      return;
-    }
-
-    Alert.alert(
-      'Remove Member',
-      `Are you sure you want to remove ${memberName} from this trip?`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            setRemovingMember(memberUserId);
-
-            const { data, error } =
-              await removeTripMember(
-                String(tripId),
-                memberUserId
-              );
-
-            setRemovingMember(null);
-
-            if (error) {
-              Alert.alert(
-                'Remove Failed',
-                error.message
-              );
-              return;
-            }
-
-            if (!data) {
-              Alert.alert(
-                'Remove Failed',
-                'The member could not be removed.'
-              );
-              return;
-            }
-
-            Alert.alert(
-              'Success',
-              `${memberName} has been removed from the trip.`
-            );
-
-            loadTrip();
-          },
-        },
-      ]
-    );
-  };
+  }
 
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
-        <Text>Loading trip...</Text>
+        <ActivityIndicator size="large" color="#4F8CFF" />
+        <Text style={styles.secondary}>Loading trip...</Text>
       </View>
     );
   }
@@ -366,17 +469,35 @@ export default function TripDetailsScreen() {
   if (!trip) {
     return (
       <View style={styles.center}>
-        <Text>Trip not found.</Text>
+        <Text style={styles.error}>
+          {loadError || 'Trip not found.'}
+        </Text>
+
+        <TouchableOpacity
+          accessibilityRole="button"
+          onPress={() => void loadTrip()}
+        >
+          <Text style={styles.link}>Try Again</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
-  const isOwner =
-    currentUserId === trip.created_by;
+  const dialogTitle =
+    pendingAction?.kind === 'delete'
+      ? 'Delete completed trip?'
+      : pendingAction?.kind === 'confirm'
+        ? 'Confirm participation?'
+        : 'Remove member?';
 
-  const visitedCount = destinations.filter(
-    (place) => place.visited
-  ).length;
+  const dialogMessage =
+    pendingAction?.kind === 'delete'
+      ? `Delete “${trip.name}”? This permanently deletes the trip for all members. Already confirmed participation points are preserved.`
+      : pendingAction?.kind === 'confirm'
+        ? `Confirm that ${memberName(pendingAction.member)} participated in this completed trip. This awards points up to the participation cap.`
+        : pendingAction?.kind === 'remove'
+          ? `Remove ${memberName(pendingAction.member)} from this trip? Removing a member does not revoke previously confirmed points.`
+          : '';
 
   return (
     <ScrollView
@@ -384,51 +505,58 @@ export default function TripDetailsScreen() {
       contentContainerStyle={styles.container}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.title}>
-        Trip Details
-      </Text>
+      <Text style={styles.title}>Trip Details</Text>
 
       <Text style={styles.tripStatus}>
-        {getTripStatus(trip, today) === 'completed' ? 'Completed' : getTripStatus(trip, today) === 'ongoing' ? 'Ongoing' : getTripStatus(trip, today) === 'upcoming' ? 'Upcoming' : 'Dates unavailable'}
+        {status === 'completed'
+          ? 'Completed'
+          : status === 'ongoing'
+            ? 'Ongoing'
+            : status === 'upcoming'
+              ? 'Upcoming'
+              : 'Dates unavailable'}
       </Text>
-      {!!deleteError && <Text style={styles.deleteError}>{deleteError}</Text>}
 
-      <Text style={styles.label}>
-        Trip Name
-      </Text>
+      {!!message && (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={styles.success}
+        >
+          {message}
+        </Text>
+      )}
 
+      {!!actionError && !pendingAction && (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={styles.error}
+        >
+          {actionError}
+        </Text>
+      )}
+
+      <Text style={styles.label}>Trip Name</Text>
+      <Text style={styles.value}>{trip.name}</Text>
+
+      <Text style={styles.label}>Destination</Text>
+      <Text style={styles.value}>{trip.destination}</Text>
+
+      <Text style={styles.label}>Start Date</Text>
       <Text style={styles.value}>
-        {trip.name}
+        {trip.start_date || 'Not specified'}
       </Text>
 
-      <Text style={styles.label}>
-        Destination
-      </Text>
-
+      <Text style={styles.label}>End Date</Text>
       <Text style={styles.value}>
-        {trip.destination}
-      </Text>
-
-      <Text style={styles.label}>
-        Start Date
-      </Text>
-
-      <Text style={styles.value}>
-        {trip.start_date}
-      </Text>
-
-      <Text style={styles.label}>
-        End Date
-      </Text>
-
-      <Text style={styles.value}>
-        {trip.end_date}
+        {trip.end_date || 'Not specified'}
       </Text>
 
       {isOwner && (
         <>
           <TouchableOpacity
+            accessibilityRole="button"
             style={styles.editButton}
+            disabled={!!busy}
             onPress={() =>
               router.push({
                 pathname: '/edit-trip',
@@ -436,70 +564,62 @@ export default function TripDetailsScreen() {
                   tripId: trip.id,
                   name: trip.name,
                   destination: trip.destination,
-                  startDate: trip.start_date,
-                  endDate: trip.end_date,
+                  startDate: trip.start_date ?? '',
+                  endDate: trip.end_date ?? '',
                 },
               })
             }
-            disabled={deleting}
           >
-            <Text style={styles.editButtonText}>
-              Edit Trip
-            </Text>
+            <Text style={styles.editButtonText}>Edit Trip</Text>
           </TouchableOpacity>
 
-          {getTripStatus(trip, today) === 'completed' && (
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={handleDeleteTrip}
-            disabled={deleting}
-          >
-            {deleting ? (
-              <ActivityIndicator color="#DC2626" />
-            ) : (
+          {completed && (
+            <TouchableOpacity
+              accessibilityRole="button"
+              style={styles.deleteButton}
+              disabled={!!busy}
+              onPress={() => openAction({ kind: 'delete' })}
+            >
               <Text style={styles.deleteButtonText}>
                 Delete Completed Trip
               </Text>
-            )}
-          </TouchableOpacity>
+            </TouchableOpacity>
           )}
         </>
       )}
 
-      {!isOwner && getTripStatus(trip, today) !== 'completed' && (
+      {!isOwner && !isMember && canJoin && (
         <TouchableOpacity
-          style={styles.joinButton}
-          onPress={handleJoinTrip}
-          disabled={joining}
+          accessibilityRole="button"
+          style={styles.primaryButton}
+          disabled={!!busy}
+          onPress={() => void handleJoinTrip()}
         >
-          <Text style={styles.joinButtonText}>
-            {joining
-              ? 'Joining...'
-              : 'Join This Trip'}
+          <Text style={styles.buttonText}>
+            {busy === 'join' ? 'Joining...' : 'Join This Trip'}
           </Text>
         </TouchableOpacity>
       )}
 
-      <View style={styles.placesHeader}>
-        <Text style={styles.placesTitle}>
-          Places to Visit
+      {!isOwner && isMember && (
+        <Text style={styles.success}>
+          You are a member of this trip.
         </Text>
+      )}
 
-        <Text style={styles.placesProgress}>
-          {visitedCount} of {destinations.length}{' '}
-          completed
+      <View style={styles.placesHeader}>
+        <Text style={styles.sectionTitle}>Places to Visit</Text>
+
+        <Text style={styles.secondary}>
+          {visitedCount} of {destinations.length} completed
         </Text>
       </View>
 
       {destinations.length === 0 ? (
-        <View style={styles.noPlacesCard}>
-          <Text style={styles.noPlacesTitle}>
-            No places added
-          </Text>
-
-          <Text style={styles.noPlacesText}>
-            No places to visit have been added
-            to this trip yet.
+        <View style={styles.card}>
+          <Text style={styles.memberName}>No places added</Text>
+          <Text style={styles.secondary}>
+            No places to visit have been added to this trip yet.
           </Text>
         </View>
       ) : (
@@ -507,43 +627,37 @@ export default function TripDetailsScreen() {
           {destinations.map((place) => (
             <TouchableOpacity
               key={place.id}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: place.visited }}
+              accessibilityLabel={place.name}
               style={styles.placeRow}
-              onPress={() =>
-                handleTogglePlace(place)
-              }
-              disabled={
-                updatingPlace === place.id
-              }
-              activeOpacity={0.7}
+              disabled={!!busy}
+              onPress={() => void handleTogglePlace(place)}
             >
               <View
                 style={[
                   styles.checkbox,
-                  place.visited &&
-                    styles.checkboxVisited,
+                  place.visited && styles.checkboxVisited,
                 ]}
               >
                 {place.visited && (
-                  <Text style={styles.checkmark}>
-                    ✓
-                  </Text>
+                  <Text style={styles.checkmark}>✓</Text>
                 )}
               </View>
 
               <Text
                 style={[
                   styles.placeName,
-                  place.visited &&
-                    styles.placeNameVisited,
+                  place.visited && styles.placeNameVisited,
                 ]}
               >
                 {place.name}
               </Text>
 
-              {updatingPlace === place.id && (
+              {busy === `place-${place.id}` && (
                 <ActivityIndicator
                   size="small"
-                  style={styles.placeLoader}
+                  color="#4F8CFF"
                 />
               )}
             </TouchableOpacity>
@@ -551,94 +665,197 @@ export default function TripDetailsScreen() {
         </View>
       )}
 
-      <Text style={styles.membersTitle}>
-        Trip Members
-      </Text>
+      <Text style={styles.membersTitle}>Trip Members</Text>
+
+      {completed && isOwner && (
+        <View style={styles.infoCard}>
+          <Text style={styles.memberName}>
+            Confirm Participation
+          </Text>
+          <Text style={styles.secondary}>
+            Confirm only members who actually participated.
+            Each eligible trip contributes 160 points, for up to
+            five trips. You cannot confirm your own participation.
+          </Text>
+        </View>
+      )}
+
+      {completed && !isOwner && (
+        <Text style={styles.secondary}>
+          The organiser can confirm your participation after
+          the trip ends.
+        </Text>
+      )}
+
+      {!!confirmationError && (
+        <View style={styles.infoCard}>
+          <Text style={styles.error}>
+            Participation records could not be loaded:
+            {' '}
+            {confirmationError}
+          </Text>
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            disabled={!!busy}
+            onPress={() => void loadTrip()}
+          >
+            <Text style={styles.link}>
+              Retry Participation Records
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {members.length === 0 ? (
-        <Text style={styles.noMembers}>
-          No members found.
-        </Text>
+        <Text style={styles.secondary}>No members found.</Text>
       ) : (
         members.map((member) => {
-          const memberName =
-            member.profiles?.full_name ||
-            'Unknown User';
+          const organiser = member.user_id === trip.created_by;
+          const confirmed = isConfirmed(member.user_id);
 
-          const isMemberOwner =
-            member.user_id === trip.created_by ||
-            member.role === 'owner';
+          const canViewConfirmation =
+            isOwner || member.user_id === currentUserId;
 
           return (
-            <View
-              key={member.user_id}
-              style={styles.memberCard}
-            >
-              <View style={styles.memberInfo}>
-                <Text style={styles.memberName}>
-                  {memberName}
-                </Text>
+            <View key={member.user_id} style={styles.card}>
+              <Text style={styles.memberName}>
+                {memberName(member)}
+                {member.user_id === currentUserId ? ' (You)' : ''}
+              </Text>
 
-                <Text style={styles.memberEmail}>
-                  {member.profiles?.email ||
-                    'No email'}
+              {!!member.profiles?.email && (
+                <Text style={styles.secondary}>
+                  {member.profiles.email}
                 </Text>
+              )}
 
-                <Text style={styles.memberRole}>
-                  Role: {member.role}
+              <Text style={styles.memberRole}>
+                {organiser ? 'Organiser' : 'Member'}
+              </Text>
+
+              {canViewConfirmation && confirmed && (
+                <Text style={styles.confirmedText}>
+                  ✓ Participation Confirmed
                 </Text>
-              </View>
+              )}
 
-              {isOwner && !isMemberOwner && (
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={() =>
-                    handleRemoveMember(
-                      member.user_id,
-                      memberName
-                    )
-                  }
-                  disabled={
-                    removingMember ===
-                    member.user_id
-                  }
-                >
-                  {removingMember ===
-                  member.user_id ? (
-                    <ActivityIndicator
-                      size="small"
-                      color="#DC2626"
-                    />
-                  ) : (
-                    <Text
-                      style={
-                        styles.removeButtonText
+              {completed &&
+                canViewConfirmation &&
+                !organiser &&
+                !confirmed &&
+                !confirmationError && (
+                  <Text style={styles.secondary}>
+                    Participation not confirmed yet.
+                  </Text>
+                )}
+
+              {isOwner && !organiser && (
+                <View>
+                  {completed && !confirmed && (
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      style={[
+                        styles.confirmButton,
+                        (!!busy || !!confirmationError) &&
+                          styles.disabled,
+                      ]}
+                      disabled={!!busy || !!confirmationError}
+                      onPress={() =>
+                        openAction({ kind: 'confirm', member })
                       }
                     >
-                      Remove
-                    </Text>
+                      <Text style={styles.buttonText}>
+                        Confirm Participation
+                      </Text>
+                    </TouchableOpacity>
                   )}
-                </TouchableOpacity>
+
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.removeButton}
+                    disabled={!!busy}
+                    onPress={() =>
+                      openAction({ kind: 'remove', member })
+                    }
+                  >
+                    <Text style={styles.deleteButtonText}>
+                      Remove Member
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
           );
         })
       )}
-<Modal visible={confirmDelete} transparent animationType="fade" onRequestClose={() => {
-            if (!deleting)
-                setConfirmDelete(false);
-        }}>
-        <View style={styles.deleteBackdrop}>
-          <View style={styles.deleteDialog} accessibilityViewIsModal>
-            <Text style={styles.placesTitle}>Delete completed trip?</Text>
-            <Text style={styles.noPlacesText}>
-              Delete “{trip.name}”? This permanently deletes the trip for all its members.
+
+      <Modal
+        visible={pendingAction !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!actionLock.current) {
+            setPendingAction(null);
+            setActionError('');
+          }
+        }}
+      >
+        <View style={styles.backdrop}>
+          <View style={styles.dialog} accessibilityViewIsModal>
+            <Text style={styles.sectionTitle}>
+              {dialogTitle}
             </Text>
-            {!!deleteError && <Text style={styles.deleteError}>{deleteError}</Text>}
-            <TouchableOpacity style={styles.deleteButton} disabled={deleting} onPress={() => void confirmDeleteTrip()}>
-              <Text style={styles.deleteButtonText}>{deleting ? 'Deleting...' : 'Delete Trip'}</Text>
+
+            <Text style={styles.dialogText}>
+              {dialogMessage}
+            </Text>
+
+            {!!actionError && (
+              <Text
+                accessibilityLiveRegion="polite"
+                style={styles.error}
+              >
+                {actionError}
+              </Text>
+            )}
+
+            <TouchableOpacity
+              accessibilityRole="button"
+              style={
+                pendingAction?.kind === 'confirm'
+                  ? styles.primaryButton
+                  : styles.deleteButton
+              }
+              disabled={!!busy}
+              onPress={() => void handleConfirmedAction()}
+            >
+              <Text
+                style={
+                  pendingAction?.kind === 'confirm'
+                    ? styles.buttonText
+                    : styles.deleteButtonText
+                }
+              >
+                {busy
+                  ? 'Please wait...'
+                  : pendingAction?.kind === 'confirm'
+                    ? 'Confirm Participation'
+                    : pendingAction?.kind === 'delete'
+                      ? 'Delete Trip'
+                      : 'Remove Member'}
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.editButton} disabled={deleting} onPress={() => setConfirmDelete(false)}>
+
+            <TouchableOpacity
+              accessibilityRole="button"
+              style={styles.editButton}
+              disabled={!!busy}
+              onPress={() => {
+                setPendingAction(null);
+                setActionError('');
+              }}
+            >
               <Text style={styles.editButtonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -649,113 +866,120 @@ export default function TripDetailsScreen() {
 }
 
 const styles = StyleSheet.create({
-  tripStatus: { color: '#83DCAA', fontWeight: '700', marginBottom: 12 },
-  deleteError: { color: '#FF9B9B', marginVertical: 10 },
-  deleteBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  deleteDialog: { width: '100%', maxWidth: 460, backgroundColor: '#151821', borderRadius: 18, padding: 22 },
   scrollView: {
     flex: 1,
     backgroundColor: '#08090D',
   },
-
   container: {
     padding: 24,
-    paddingBottom: 40,
+    paddingBottom: 48,
   },
-
   center: {
     flex: 1,
+    backgroundColor: '#08090D',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 10,
+    padding: 24,
   },
-
   title: {
     fontSize: 28,
     fontWeight: '700',
-    marginBottom: 30,
+    marginBottom: 16,
     color: '#F7F8FC',
   },
-
+  tripStatus: {
+    color: '#83DCAA',
+    fontWeight: '700',
+    marginBottom: 12,
+  },
   label: {
     fontSize: 14,
     fontWeight: '600',
     color: '#9299A8',
     marginTop: 15,
   },
-
   value: {
     fontSize: 18,
     color: '#F7F8FC',
     marginTop: 5,
   },
-
+  secondary: {
+    fontSize: 14,
+    color: '#9299A8',
+    marginTop: 6,
+    lineHeight: 21,
+  },
+  error: {
+    color: '#FF9B9B',
+    marginVertical: 12,
+    lineHeight: 21,
+  },
+  success: {
+    color: '#83DCAA',
+    marginVertical: 12,
+    lineHeight: 21,
+  },
+  link: {
+    color: '#75A2FF',
+    fontWeight: '700',
+    paddingVertical: 12,
+  },
   editButton: {
-    height: 50,
+    minHeight: 50,
     backgroundColor: '#151821',
     borderWidth: 1,
     borderColor: '#4F8CFF',
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 25,
+    padding: 12,
+    marginTop: 20,
   },
-
   editButtonText: {
-    color: '#4F8CFF',
+    color: '#75A2FF',
     fontSize: 16,
     fontWeight: '700',
   },
-
   deleteButton: {
-    height: 50,
+    minHeight: 50,
     backgroundColor: '#151821',
     borderWidth: 1,
     borderColor: '#59303A',
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 10,
+    padding: 12,
+    marginTop: 12,
   },
-
   deleteButtonText: {
     color: '#FF7B86',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
   },
-
-  joinButton: {
-    height: 50,
+  primaryButton: {
+    minHeight: 50,
     backgroundColor: '#4F8CFF',
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 25,
+    padding: 12,
+    marginTop: 20,
   },
-
-  joinButtonText: {
+  buttonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
+    textAlign: 'center',
   },
-
   placesHeader: {
     marginTop: 30,
     marginBottom: 12,
   },
-
-  placesTitle: {
+  sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: '#F7F8FC',
   },
-
-  placesProgress: {
-    fontSize: 13,
-    color: '#9299A8',
-    marginTop: 4,
-  },
-
   placesCard: {
     backgroundColor: '#151821',
     borderRadius: 12,
@@ -763,7 +987,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#252A37',
   },
-
   placeRow: {
     minHeight: 58,
     flexDirection: 'row',
@@ -771,7 +994,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#252A37',
   },
-
   checkbox: {
     width: 25,
     height: 25,
@@ -782,53 +1004,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
-
   checkboxVisited: {
     backgroundColor: '#4F8CFF',
     borderColor: '#4F8CFF',
   },
-
   checkmark: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
-
   placeName: {
     flex: 1,
     fontSize: 16,
     color: '#F7F8FC',
+    paddingVertical: 12,
+    marginRight: 8,
   },
-
   placeNameVisited: {
     color: '#9299A8',
     textDecorationLine: 'line-through',
   },
-
-  placeLoader: {
-    marginLeft: 8,
-  },
-
-  noPlacesCard: {
-    backgroundColor: '#151821',
-    borderRadius: 12,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#252A37',
-  },
-
-  noPlacesTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#F7F8FC',
-  },
-
-  noPlacesText: {
-    fontSize: 14,
-    color: '#9299A8',
-    marginTop: 5,
-  },
-
   membersTitle: {
     fontSize: 20,
     fontWeight: '700',
@@ -836,60 +1031,76 @@ const styles = StyleSheet.create({
     marginTop: 30,
     marginBottom: 12,
   },
-
-  memberCard: {
+  card: {
     backgroundColor: '#151821',
     borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: '#252A37',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
-
-  memberInfo: {
-    flex: 1,
-    marginRight: 10,
+  infoCard: {
+    backgroundColor: '#142035',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#293F64',
   },
-
   memberName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#F7F8FC',
   },
-
-  memberEmail: {
-    fontSize: 14,
-    color: '#9299A8',
-    marginTop: 4,
-  },
-
   memberRole: {
-    fontSize: 14,
-    color: '#4F8CFF',
-    marginTop: 4,
+    fontSize: 13,
+    color: '#75A2FF',
+    marginTop: 8,
     fontWeight: '600',
   },
-
+  confirmedText: {
+    color: '#83DCAA',
+    marginTop: 14,
+    fontWeight: '700',
+  },
+  confirmButton: {
+    backgroundColor: '#4F8CFF',
+    borderRadius: 10,
+    padding: 13,
+    alignItems: 'center',
+    marginTop: 16,
+  },
   removeButton: {
     borderWidth: 1,
     borderColor: '#59303A',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 10,
+    padding: 12,
+    alignItems: 'center',
+    marginTop: 10,
   },
-
-  removeButtonText: {
-    color: '#FF7B86',
-    fontSize: 13,
-    fontWeight: '700',
+  disabled: {
+    opacity: 0.5,
   },
-
-  noMembers: {
-    fontSize: 15,
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  dialog: {
+    width: '100%',
+    maxWidth: 460,
+    backgroundColor: '#151821',
+    borderRadius: 18,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: '#252A37',
+  },
+  dialogText: {
     color: '#9299A8',
+    fontSize: 14,
+    marginTop: 12,
+    lineHeight: 22,
   },
 });
-

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -13,10 +13,14 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 
+import ProfilePointsBar from '@/components/ProfilePointsBar';
+import { loadProfilePoints } from '@/services/profilePoints';
+
 import {
   loadCompanions,
   type Companion,
 } from '@/services/companionDiscovery';
+
 import {
   acceptCompanionRequest,
   cancelCompanionRequest,
@@ -107,7 +111,6 @@ function matchesFilters(person: Companion, filters: Filters) {
     return false;
   }
 
-  // Include travellers whose dates overlap the selected period.
   if (filters.start || filters.end) {
     if (!person.travel_start_date || !person.travel_end_date) {
       return false;
@@ -128,7 +131,6 @@ function matchesFilters(person: Companion, filters: Filters) {
     }
   }
 
-  // Compare overlapping budget ranges in the same currency.
   if (filters.min !== '' || filters.max !== '') {
     if (
       person.budget_currency.toUpperCase() !==
@@ -137,13 +139,19 @@ function matchesFilters(person: Companion, filters: Filters) {
       return false;
     }
 
-    if (person.budget_min === null && person.budget_max === null) {
+    if (
+      person.budget_min === null &&
+      person.budget_max === null
+    ) {
       return false;
     }
 
     const personMin = person.budget_min ?? 0;
     const personMax = person.budget_max ?? Infinity;
-    const filterMin = filters.min === '' ? 0 : Number(filters.min);
+
+    const filterMin =
+      filters.min === '' ? 0 : Number(filters.min);
+
     const filterMax =
       filters.max === '' ? Infinity : Number(filters.max);
 
@@ -193,32 +201,52 @@ function Avatar({ person }: { person: Companion }) {
   return (
     <View style={styles.avatarFallback}>
       <Text style={styles.avatarLetter}>
-        {person.full_name.charAt(0).toUpperCase()}
+        {person.full_name.charAt(0).toUpperCase() || 'T'}
       </Text>
     </View>
   );
 }
 
 export default function CompanionDiscoveryPanel() {
-  const [mode, setMode] = useState<'travellers' | 'requests'>('travellers');
+  const [mode, setMode] = useState<
+    'travellers' | 'requests'
+  >('travellers');
+
   const [people, setPeople] = useState<Companion[]>([]);
-  const [requests, setRequests] = useState<CompanionRequest[]>([]);
+  const [requests, setRequests] =
+    useState<CompanionRequest[]>([]);
+
   const [userId, setUserId] = useState('');
   const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] =
+    useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  const [filters, setFilters] = useState<Filters>({ ...emptyFilters });
-  const [draft, setDraft] = useState<Filters>({ ...emptyFilters });
+  const [filters, setFilters] = useState<Filters>({
+    ...emptyFilters,
+  });
+  const [draft, setDraft] = useState<Filters>({
+    ...emptyFilters,
+  });
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [filterError, setFilterError] = useState('');
 
+  const [pointsByUser, setPointsByUser] =
+    useState<Record<string, number>>({});
+  const [pointsLoading, setPointsLoading] = useState(false);
+  const [pointsError, setPointsError] = useState('');
+  const [pointsRefresh, setPointsRefresh] = useState(0);
+
+  const actionLock = useRef(false);
+  const reloadLock = useRef(false);
+
   const selectedPerson =
-    people.find((person) => person.user_id === selectedId) ?? null;
+    people.find((person) => person.user_id === selectedId) ??
+    null;
 
   const activeFilterCount = [
     filters.destination,
@@ -230,6 +258,9 @@ export default function CompanionDiscoveryPanel() {
   ].filter((value) => value !== '').length;
 
   async function reload() {
+    if (reloadLock.current) return;
+
+    reloadLock.current = true;
     setLoading(true);
     setError('');
 
@@ -245,12 +276,16 @@ export default function CompanionDiscoveryPanel() {
     } catch (err) {
       setPeople([]);
       setRequests([]);
+      setUserId('');
       setSelectedId(null);
       setError(
-        err instanceof Error ? err.message : 'Unable to load discovery.'
+        err instanceof Error
+          ? err.message
+          : 'Unable to load discovery.'
       );
     } finally {
       setLoading(false);
+      reloadLock.current = false;
     }
   }
 
@@ -258,13 +293,66 @@ export default function CompanionDiscoveryPanel() {
     void reload();
   }, []);
 
+  // Fetch all loaded travellers' points together.
+  // A points error does not clear companions or requests.
+  useEffect(() => {
+    let active = true;
+
+    async function loadPoints() {
+      setPointsByUser({});
+      setPointsError('');
+
+      if (people.length === 0) {
+        setPointsLoading(false);
+        return;
+      }
+
+      setPointsLoading(true);
+
+      try {
+        const scores = await loadProfilePoints(
+          people.map((person) => person.user_id)
+        );
+
+        const next: Record<string, number> = {};
+
+        for (const score of scores) {
+          next[score.user_id] = score.total_points;
+        }
+
+        if (active) {
+          setPointsByUser(next);
+        }
+      } catch (err) {
+        if (active) {
+          setPointsError(
+            err instanceof Error
+              ? err.message
+              : 'Unable to load profile points.'
+          );
+        }
+      } finally {
+        if (active) {
+          setPointsLoading(false);
+        }
+      }
+    }
+
+    void loadPoints();
+
+    return () => {
+      active = false;
+    };
+  }, [people, pointsRefresh]);
+
   async function performAction(
     key: string,
     action: () => Promise<unknown>,
     successMessage: string
   ) {
-    if (busy) return;
+    if (actionLock.current || reloadLock.current) return;
 
+    actionLock.current = true;
     setBusy(key);
     setMessage('');
     setError('');
@@ -275,10 +363,13 @@ export default function CompanionDiscoveryPanel() {
       await reload();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Unable to complete request.'
+        err instanceof Error
+          ? err.message
+          : 'Unable to complete request.'
       );
     } finally {
       setBusy('');
+      actionLock.current = false;
     }
   }
 
@@ -309,12 +400,16 @@ export default function CompanionDiscoveryPanel() {
       (next.start && !validDate(next.start)) ||
       (next.end && !validDate(next.end))
     ) {
-      setFilterError('Enter valid dates in YYYY-MM-DD format.');
+      setFilterError(
+        'Enter valid dates in YYYY-MM-DD format.'
+      );
       return;
     }
 
     if (next.start && next.end && next.end < next.start) {
-      setFilterError('End date must be on or after the start date.');
+      setFilterError(
+        'End date must be on or after the start date.'
+      );
       return;
     }
 
@@ -335,7 +430,9 @@ export default function CompanionDiscoveryPanel() {
       next.max !== '' &&
       Number(next.max) < Number(next.min)
     ) {
-      setFilterError('Maximum budget must be at least the minimum.');
+      setFilterError(
+        'Maximum budget must be at least the minimum.'
+      );
       return;
     }
 
@@ -343,7 +440,9 @@ export default function CompanionDiscoveryPanel() {
       (next.min !== '' || next.max !== '') &&
       !/^[A-Z]{3}$/.test(next.currency)
     ) {
-      setFilterError('Enter a three-letter currency code, such as INR.');
+      setFilterError(
+        'Enter a three-letter currency code, such as INR.'
+      );
       return;
     }
 
@@ -372,13 +471,37 @@ export default function CompanionDiscoveryPanel() {
 
   const incomingCount = requests.filter(
     (request) =>
-      request.receiver_id === userId && request.status === 'pending'
+      request.receiver_id === userId &&
+      request.status === 'pending'
   ).length;
 
   function getName(id: string) {
     return (
-      people.find((person) => person.user_id === id)?.full_name ||
+      people.find((person) => person.user_id === id)
+        ?.full_name ||
       `Traveller (${id.slice(0, 8)})`
+    );
+  }
+
+  function pointsNotice() {
+    if (!pointsError) return null;
+
+    return (
+      <View style={styles.pointsNotice}>
+        <Text style={styles.error}>
+          Profile points could not be loaded: {pointsError}
+        </Text>
+
+        <TouchableOpacity
+          accessibilityRole="button"
+          disabled={pointsLoading || loading || !!busy}
+          onPress={() =>
+            setPointsRefresh((current) => current + 1)
+          }
+        >
+          <Text style={styles.link}>Retry Profile Points</Text>
+        </TouchableOpacity>
+      </View>
     );
   }
 
@@ -398,7 +521,9 @@ export default function CompanionDiscoveryPanel() {
           secondary && styles.secondaryButton,
           (!!busy || loading) && styles.disabled,
         ]}
-        onPress={() => void performAction(key, action, successMessage)}
+        onPress={() =>
+          void performAction(key, action, successMessage)
+        }
       >
         <Text style={styles.buttonText}>
           {busy === key ? 'Please wait...' : label}
@@ -410,13 +535,12 @@ export default function CompanionDiscoveryPanel() {
   function requestControls(person: Companion) {
     const connection = requests.find(
       (request) =>
-        (request.status === 'pending' || request.status === 'accepted') &&
-        (
-          (request.sender_id === userId &&
-            request.receiver_id === person.user_id) ||
+        (request.status === 'pending' ||
+          request.status === 'accepted') &&
+        ((request.sender_id === userId &&
+          request.receiver_id === person.user_id) ||
           (request.receiver_id === userId &&
-            request.sender_id === person.user_id)
-        )
+            request.sender_id === person.user_id))
     );
 
     if (!connection) {
@@ -429,13 +553,18 @@ export default function CompanionDiscoveryPanel() {
     }
 
     if (connection.status === 'accepted') {
-      return <Text style={styles.status}>Connected ✓</Text>;
+      return (
+        <Text style={styles.status}>Connected ✓</Text>
+      );
     }
 
     if (connection.sender_id === userId) {
       return (
         <>
-          <Text style={styles.status}>Request sent · Pending</Text>
+          <Text style={styles.status}>
+            Request sent · Pending
+          </Text>
+
           {actionButton(
             'Cancel Request',
             `cancel-${connection.id}`,
@@ -449,13 +578,17 @@ export default function CompanionDiscoveryPanel() {
 
     return (
       <>
-        <Text style={styles.status}>This traveller sent you a request</Text>
+        <Text style={styles.status}>
+          This traveller sent you a request
+        </Text>
+
         {actionButton(
           'Accept',
           `accept-${connection.id}`,
           () => acceptCompanionRequest(connection.id),
           'Request accepted. You are now connected.'
         )}
+
         {actionButton(
           'Decline',
           `decline-${connection.id}`,
@@ -469,14 +602,26 @@ export default function CompanionDiscoveryPanel() {
 
   function profileHeader(person: Companion) {
     return (
-      <View style={styles.profileRow}>
-        <Avatar person={person} />
-        <View style={styles.profileText}>
-          <Text style={styles.name}>{person.full_name}</Text>
-          <Text style={styles.secondary}>
-            {person.travel_style || 'Travel style not specified'}
-          </Text>
+      <View>
+        <View style={styles.profileRow}>
+          <Avatar person={person} />
+
+          <View style={styles.profileText}>
+            <Text style={styles.name}>
+              {person.full_name}
+            </Text>
+
+            <Text style={styles.secondary}>
+              {person.travel_style ||
+                'Travel style not specified'}
+            </Text>
+          </View>
         </View>
+
+        <ProfilePointsBar
+          points={pointsByUser[person.user_id] ?? null}
+          loading={pointsLoading}
+        />
       </View>
     );
   }
@@ -488,7 +633,8 @@ export default function CompanionDiscoveryPanel() {
 
         <Text style={styles.label}>DESTINATIONS</Text>
         <Text style={styles.body}>
-          {item.preferred_destinations.join(', ') || 'Open to suggestions'}
+          {item.preferred_destinations.join(', ') ||
+            'Open to suggestions'}
         </Text>
 
         <Text style={styles.label}>TRAVEL DATES</Text>
@@ -506,7 +652,9 @@ export default function CompanionDiscoveryPanel() {
           style={[styles.button, styles.secondaryButton]}
           onPress={() => setSelectedId(item.user_id)}
         >
-          <Text style={styles.buttonText}>View Profile</Text>
+          <Text style={styles.buttonText}>
+            View Profile
+          </Text>
         </TouchableOpacity>
 
         {requestControls(item)}
@@ -514,9 +662,16 @@ export default function CompanionDiscoveryPanel() {
     );
   }
 
-  function renderRequest({ item }: { item: CompanionRequest }) {
+  function renderRequest({
+    item,
+  }: {
+    item: CompanionRequest;
+  }) {
     const received = item.receiver_id === userId;
-    const otherId = received ? item.sender_id : item.receiver_id;
+    const otherId = received
+      ? item.sender_id
+      : item.receiver_id;
+
     const personAvailable = people.some(
       (person) => person.user_id === otherId
     );
@@ -526,23 +681,31 @@ export default function CompanionDiscoveryPanel() {
         <Text style={styles.label}>
           {received ? 'RECEIVED REQUEST' : 'SENT REQUEST'}
         </Text>
+
         <Text style={styles.name}>{getName(otherId)}</Text>
+
         <Text style={styles.secondary}>
           {new Date(item.created_at).toLocaleDateString()}
         </Text>
-        <Text style={styles.status}>Status: {item.status}</Text>
+
+        <Text style={styles.status}>
+          Status: {item.status}
+        </Text>
 
         {personAvailable && (
           <TouchableOpacity
+            accessibilityRole="button"
             style={[styles.button, styles.secondaryButton]}
             onPress={() => setSelectedId(otherId)}
           >
-            <Text style={styles.buttonText}>View Profile</Text>
+            <Text style={styles.buttonText}>
+              View Profile
+            </Text>
           </TouchableOpacity>
         )}
 
-        {item.status === 'pending' && (
-          received ? (
+        {item.status === 'pending' &&
+          (received ? (
             <>
               {actionButton(
                 'Accept',
@@ -550,6 +713,7 @@ export default function CompanionDiscoveryPanel() {
                 () => acceptCompanionRequest(item.id),
                 'Request accepted. You are now connected.'
               )}
+
               {actionButton(
                 'Decline',
                 `decline-${item.id}`,
@@ -566,8 +730,7 @@ export default function CompanionDiscoveryPanel() {
               'Request cancelled.',
               true
             )
-          )
-        )}
+          ))}
       </View>
     );
   }
@@ -576,13 +739,17 @@ export default function CompanionDiscoveryPanel() {
     <View style={styles.container}>
       <View style={styles.toolbar}>
         <TouchableOpacity
+          accessibilityRole="button"
           disabled={!!busy || loading}
-          onPress={() => router.push('/travel-preferences')}
+          onPress={() =>
+            router.push('/travel-preferences')
+          }
         >
           <Text style={styles.link}>My Preferences</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
+          accessibilityRole="button"
           disabled={!!busy || loading}
           onPress={() => {
             setMessage('');
@@ -595,14 +762,28 @@ export default function CompanionDiscoveryPanel() {
 
       <View style={styles.tabs}>
         <TouchableOpacity
-          style={[styles.tab, mode === 'travellers' && styles.selectedTab]}
+          accessibilityRole="tab"
+          accessibilityState={{
+            selected: mode === 'travellers',
+          }}
+          style={[
+            styles.tab,
+            mode === 'travellers' && styles.selectedTab,
+          ]}
           onPress={() => setMode('travellers')}
         >
           <Text style={styles.buttonText}>Travellers</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tab, mode === 'requests' && styles.selectedTab]}
+          accessibilityRole="tab"
+          accessibilityState={{
+            selected: mode === 'requests',
+          }}
+          style={[
+            styles.tab,
+            mode === 'requests' && styles.selectedTab,
+          ]}
           onPress={() => setMode('requests')}
         >
           <Text style={styles.buttonText}>
@@ -612,17 +793,25 @@ export default function CompanionDiscoveryPanel() {
       </View>
 
       {!!message && (
-        <Text accessibilityLiveRegion="polite" style={styles.success}>
+        <Text
+          accessibilityLiveRegion="polite"
+          style={styles.success}
+        >
           {message}
         </Text>
       )}
 
       {!!error && (
         <View>
-          <Text accessibilityLiveRegion="polite" style={styles.error}>
+          <Text
+            accessibilityLiveRegion="polite"
+            style={styles.error}
+          >
             {error}
           </Text>
+
           <TouchableOpacity
+            accessibilityRole="button"
             disabled={!!busy || loading}
             onPress={() => void reload()}
           >
@@ -633,8 +822,13 @@ export default function CompanionDiscoveryPanel() {
 
       {loading ? (
         <View style={styles.empty}>
-          <ActivityIndicator size="large" color="#4F8CFF" />
-          <Text style={styles.secondary}>Loading companions...</Text>
+          <ActivityIndicator
+            size="large"
+            color="#4F8CFF"
+          />
+          <Text style={styles.secondary}>
+            Loading companions...
+          </Text>
         </View>
       ) : mode === 'travellers' ? (
         <>
@@ -655,13 +849,20 @@ export default function CompanionDiscoveryPanel() {
             >
               <Text style={styles.link}>
                 Filters
-                {activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+                {activeFilterCount > 0
+                  ? ` (${activeFilterCount})`
+                  : ''}
               </Text>
             </TouchableOpacity>
 
             {activeFilterCount > 0 && (
-              <TouchableOpacity onPress={clearFilters}>
-                <Text style={styles.link}>Clear Filters</Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={clearFilters}
+              >
+                <Text style={styles.link}>
+                  Clear Filters
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -673,14 +874,26 @@ export default function CompanionDiscoveryPanel() {
             contentContainerStyle={styles.list}
             keyboardShouldPersistTaps="handled"
             ListHeaderComponent={
-              <Text style={styles.secondary}>
-                {filteredPeople.length} of {people.length} loaded travellers
-                {' · Latest 50 discoverable profiles'}
-              </Text>
+              <View>
+                {pointsNotice()}
+
+                <Text style={styles.secondary}>
+                  {filteredPeople.length} of {people.length}
+                  {' loaded travellers · Latest 50 discoverable profiles'}
+                </Text>
+
+                <Text style={styles.pointsExplanation}>
+                  Profile Points reflect profile details and confirmed
+                  trip participation. They do not guarantee safety.
+                </Text>
+              </View>
             }
             ListEmptyComponent={
               <View style={styles.empty}>
-                <Text style={styles.name}>No travellers found</Text>
+                <Text style={styles.name}>
+                  No travellers found
+                </Text>
+
                 <Text style={styles.secondary}>
                   {query || activeFilterCount > 0
                     ? 'Try another search or clear your filters.'
@@ -696,9 +909,13 @@ export default function CompanionDiscoveryPanel() {
           keyExtractor={(item) => item.id}
           renderItem={renderRequest}
           contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.name}>No requests yet</Text>
+              <Text style={styles.name}>
+                No requests yet
+              </Text>
+
               <Text style={styles.secondary}>
                 Sent and received requests will appear here.
               </Text>
@@ -707,7 +924,6 @@ export default function CompanionDiscoveryPanel() {
         />
       )}
 
-      {/* Filters */}
       <Modal
         visible={filtersVisible}
         transparent
@@ -715,10 +931,17 @@ export default function CompanionDiscoveryPanel() {
         onRequestClose={() => setFiltersVisible(false)}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard} accessibilityViewIsModal>
+          <View
+            style={styles.modalCard}
+            accessibilityViewIsModal
+          >
             <View style={styles.modalHeader}>
-              <Text style={styles.name}>Filter Travellers</Text>
+              <Text style={styles.name}>
+                Filter Travellers
+              </Text>
+
               <TouchableOpacity
+                accessibilityRole="button"
                 accessibilityLabel="Close filters"
                 onPress={() => setFiltersVisible(false)}
               >
@@ -737,7 +960,10 @@ export default function CompanionDiscoveryPanel() {
 
               {filterFields.map((field) => (
                 <View key={field.key}>
-                  <Text style={styles.label}>{field.label}</Text>
+                  <Text style={styles.label}>
+                    {field.label}
+                  </Text>
+
                   <TextInput
                     accessibilityLabel={field.label}
                     style={styles.input}
@@ -753,17 +979,21 @@ export default function CompanionDiscoveryPanel() {
                     }}
                     autoCorrect={false}
                     autoCapitalize={
-                      field.key === 'currency' ? 'characters' : 'none'
+                      field.key === 'currency'
+                        ? 'characters'
+                        : 'none'
                     }
                     keyboardType={
-                      field.key === 'min' || field.key === 'max'
+                      field.key === 'min' ||
+                      field.key === 'max'
                         ? 'decimal-pad'
                         : 'default'
                     }
                     maxLength={
                       field.key === 'currency'
                         ? 3
-                        : field.key === 'start' || field.key === 'end'
+                        : field.key === 'start' ||
+                            field.key === 'end'
                           ? 10
                           : 100
                     }
@@ -772,41 +1002,54 @@ export default function CompanionDiscoveryPanel() {
               ))}
 
               <Text style={styles.secondary}>
-                Dates match overlapping travel periods. Travellers without
-                both dates are excluded when date filters are applied.
+                Dates match overlapping travel periods.
+                Travellers without both dates are excluded
+                when date filters are applied.
               </Text>
 
               <Text style={styles.secondary}>
-                Budgets match overlapping ranges in the same currency.
-                Profiles without a budget are excluded when budget
-                filters are applied. No currency conversion is performed.
+                Budgets match overlapping ranges in the same
+                currency. Profiles without a budget are excluded
+                when budget filters are applied.
+                No currency conversion is performed.
               </Text>
 
               {!!filterError && (
-                <Text accessibilityLiveRegion="polite" style={styles.error}>
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={styles.error}
+                >
                   {filterError}
                 </Text>
               )}
 
               <TouchableOpacity
+                accessibilityRole="button"
                 style={styles.button}
                 onPress={applyFilters}
               >
-                <Text style={styles.buttonText}>Apply Filters</Text>
+                <Text style={styles.buttonText}>
+                  Apply Filters
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.button, styles.secondaryButton]}
+                accessibilityRole="button"
+                style={[
+                  styles.button,
+                  styles.secondaryButton,
+                ]}
                 onPress={clearFilters}
               >
-                <Text style={styles.buttonText}>Clear All Filters</Text>
+                <Text style={styles.buttonText}>
+                  Clear All Filters
+                </Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
       </Modal>
 
-      {/* Traveller profile */}
       <Modal
         visible={selectedPerson !== null}
         transparent
@@ -814,9 +1057,15 @@ export default function CompanionDiscoveryPanel() {
         onRequestClose={() => setSelectedId(null)}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard} accessibilityViewIsModal>
+          <View
+            style={styles.modalCard}
+            accessibilityViewIsModal
+          >
             <View style={styles.modalHeader}>
-              <Text style={styles.name}>Traveller Profile</Text>
+              <Text style={styles.name}>
+                Traveller Profile
+              </Text>
+
               <TouchableOpacity
                 accessibilityRole="button"
                 accessibilityLabel="Close traveller profile"
@@ -832,6 +1081,12 @@ export default function CompanionDiscoveryPanel() {
                 keyboardShouldPersistTaps="handled"
               >
                 {profileHeader(selectedPerson)}
+                {pointsNotice()}
+
+                <Text style={styles.pointsExplanation}>
+                  Points reflect recorded activity and do not
+                  guarantee safety.
+                </Text>
 
                 <Text style={styles.label}>ABOUT</Text>
                 <Text style={styles.body}>
@@ -840,10 +1095,13 @@ export default function CompanionDiscoveryPanel() {
 
                 <Text style={styles.label}>INTERESTS</Text>
                 <Text style={styles.body}>
-                  {selectedPerson.interests.join(', ') || 'Not specified'}
+                  {selectedPerson.interests.join(', ') ||
+                    'Not specified'}
                 </Text>
 
-                <Text style={styles.label}>PREFERRED DESTINATIONS</Text>
+                <Text style={styles.label}>
+                  PREFERRED DESTINATIONS
+                </Text>
                 <Text style={styles.body}>
                   {selectedPerson.preferred_destinations.join(', ') ||
                     'Open to suggestions'}
@@ -851,22 +1109,30 @@ export default function CompanionDiscoveryPanel() {
 
                 <Text style={styles.label}>TRAVEL DATES</Text>
                 <Text style={styles.body}>
-                  {selectedPerson.travel_start_date || 'Flexible start'}
+                  {selectedPerson.travel_start_date ||
+                    'Flexible start'}
                   {' → '}
-                  {selectedPerson.travel_end_date || 'Flexible end'}
+                  {selectedPerson.travel_end_date ||
+                    'Flexible end'}
                 </Text>
 
-                <Text style={styles.label}>TOTAL TRIP BUDGET PER PERSON</Text>
+                <Text style={styles.label}>
+                  TOTAL TRIP BUDGET PER PERSON
+                </Text>
                 <Text style={styles.body}>
                   {budgetLabel(selectedPerson)}
                 </Text>
 
                 {!!message && (
-                  <Text style={styles.success}>{message}</Text>
+                  <Text style={styles.success}>
+                    {message}
+                  </Text>
                 )}
 
                 {!!error && (
-                  <Text style={styles.error}>{error}</Text>
+                  <Text style={styles.error}>
+                    {error}
+                  </Text>
                 )}
 
                 {requestControls(selectedPerson)}
@@ -880,13 +1146,19 @@ export default function CompanionDiscoveryPanel() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+  },
   toolbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 16,
   },
-  link: { color: '#75A2FF', fontWeight: '700', paddingVertical: 8 },
+  link: {
+    color: '#75A2FF',
+    fontWeight: '700',
+    paddingVertical: 8,
+  },
   tabs: {
     flexDirection: 'row',
     backgroundColor: '#151821',
@@ -894,8 +1166,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 14,
   },
-  tab: { flex: 1, padding: 12, alignItems: 'center', borderRadius: 9 },
-  selectedTab: { backgroundColor: '#293F64' },
+  tab: {
+    flex: 1,
+    padding: 12,
+    alignItems: 'center',
+    borderRadius: 9,
+  },
+  selectedTab: {
+    backgroundColor: '#293F64',
+  },
   input: {
     color: '#F7F8FC',
     backgroundColor: '#08090D',
@@ -905,7 +1184,9 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 12,
   },
-  list: { paddingBottom: 30 },
+  list: {
+    paddingBottom: 30,
+  },
   card: {
     backgroundColor: '#151821',
     borderWidth: 1,
@@ -914,8 +1195,16 @@ const styles = StyleSheet.create({
     padding: 18,
     marginTop: 14,
   },
-  name: { color: '#F7F8FC', fontSize: 18, fontWeight: '700' },
-  secondary: { color: '#9299A8', marginTop: 7, lineHeight: 20 },
+  name: {
+    color: '#F7F8FC',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  secondary: {
+    color: '#9299A8',
+    marginTop: 7,
+    lineHeight: 20,
+  },
   label: {
     color: '#9299A8',
     fontSize: 11,
@@ -923,8 +1212,16 @@ const styles = StyleSheet.create({
     marginTop: 18,
     marginBottom: 8,
   },
-  body: { color: '#D7DBE5', marginTop: 6, lineHeight: 21 },
-  status: { color: '#A9C5FF', marginTop: 16, fontWeight: '600' },
+  body: {
+    color: '#D7DBE5',
+    marginTop: 6,
+    lineHeight: 21,
+  },
+  status: {
+    color: '#A9C5FF',
+    marginTop: 16,
+    fontWeight: '600',
+  },
   button: {
     backgroundColor: '#4F8CFF',
     borderRadius: 10,
@@ -937,13 +1234,45 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#3B4354',
   },
-  buttonText: { color: '#FFFFFF', fontWeight: '700' },
-  disabled: { opacity: 0.5 },
-  success: { color: '#83DCAA', marginVertical: 12 },
-  error: { color: '#FF9B9B', marginTop: 12, marginBottom: 8 },
-  empty: { paddingVertical: 30, alignItems: 'center' },
-  profileRow: { flexDirection: 'row', alignItems: 'center' },
-  profileText: { flex: 1, marginLeft: 12 },
+  buttonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+  success: {
+    color: '#83DCAA',
+    marginVertical: 12,
+  },
+  error: {
+    color: '#FF9B9B',
+    marginTop: 12,
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  pointsNotice: {
+    marginBottom: 12,
+  },
+  pointsExplanation: {
+    color: '#9299A8',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 10,
+  },
+  empty: {
+    paddingVertical: 30,
+    alignItems: 'center',
+  },
+  profileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  profileText: {
+    flex: 1,
+    marginLeft: 12,
+  },
   avatar: {
     width: 60,
     height: 60,
@@ -958,7 +1287,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarLetter: { color: '#A9C5FF', fontSize: 25, fontWeight: '700' },
+  avatarLetter: {
+    color: '#A9C5FF',
+    fontSize: 25,
+    fontWeight: '700',
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.75)',
@@ -983,5 +1316,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#252A37',
   },
-  modalContent: { padding: 20, paddingBottom: 30 },
+  modalContent: {
+    padding: 20,
+    paddingBottom: 30,
+  },
 });

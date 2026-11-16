@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Image,
+  Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -10,9 +13,25 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 
-import { supabase } from '@/services/supabase';
 import CompanionDiscoveryPanel from '@/components/CompanionDiscoveryPanel';
+import RecommendedDestinations from '@/components/RecommendedDestinations';
 import { useTripToday } from '@/hooks/useTripToday';
+import { supabase } from '@/services/supabase';
+
+type Destination = {
+  id: string;
+  slug: string;
+  name: string;
+  region: string;
+  country: string;
+  category: string;
+  description: string;
+  image_url: string | null;
+  best_time_to_visit: string | null;
+  highlights: string[];
+  travel_tips: string[];
+  is_featured: boolean;
+};
 
 type Place = {
   id: string;
@@ -24,11 +43,61 @@ type Trip = {
   id: string;
   name: string;
   destination: string;
-  start_date: string;
-  end_date: string;
-  created_by: string;
+  start_date: string | null;
+  end_date: string | null;
+  created_by: string | null;
   destinations: Place[];
 };
+
+const CATEGORIES = [
+  { value: 'all', label: 'All' },
+  { value: 'beach', label: 'Beaches' },
+  { value: 'mountain', label: 'Mountains' },
+  { value: 'nature', label: 'Nature' },
+  { value: 'adventure', label: 'Adventure' },
+  { value: 'heritage', label: 'Heritage' },
+  { value: 'city', label: 'Cities' },
+  { value: 'other', label: 'Other' },
+];
+
+function categoryLabel(value: string) {
+  return (
+    CATEGORIES.find((item) => item.value === value)?.label ?? value
+  );
+}
+
+function DestinationPhoto({
+  uri,
+  name,
+}: {
+  uri: string | null;
+  name: string;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [uri]);
+
+  if (!uri || failed) {
+    return (
+      <View style={styles.photoFallback}>
+        <Text style={styles.photoIcon}>📍</Text>
+        <Text style={styles.secondary}>{name}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      source={{ uri }}
+      style={styles.photo}
+      resizeMode="cover"
+      accessibilityLabel={name}
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 export default function ExploreScreen() {
   const today = useTripToday();
@@ -38,86 +107,56 @@ export default function ExploreScreen() {
   >('destinations');
 
   const [search, setSearch] = useState('');
-  const [destination, setDestination] = useState('');
-  const [popular, setPopular] = useState<string[]>([]);
+  const [category, setCategory] = useState('all');
+
+  const [catalogue, setCatalogue] = useState<Destination[]>([]);
+  const [catalogueLoading, setCatalogueLoading] = useState(true);
+  const [catalogueError, setCatalogueError] = useState('');
+  const [catalogueRefresh, setCatalogueRefresh] = useState(0);
+
+  const [selectedDestination, setSelectedDestination] =
+    useState<Destination | null>(null);
+
+  const [tripDestination, setTripDestination] = useState('');
   const [trips, setTrips] = useState<Trip[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [refresh, setRefresh] = useState(0);
+  const [tripsLoading, setTripsLoading] = useState(false);
+  const [tripsError, setTripsError] = useState('');
+  const [tripsRefresh, setTripsRefresh] = useState(0);
 
   useEffect(() => {
     let active = true;
 
-    async function load() {
-      setLoading(true);
-      setError('');
+    async function loadCatalogue() {
+      setCatalogueLoading(true);
+      setCatalogueError('');
 
       try {
-        if (!destination) {
-          const { data, error: queryError } = await supabase
-            .from('trips')
-            .select('destination')
-            .gte('end_date', today)
-            .order('created_at', { ascending: false });
+        const { data, error } = await supabase
+          .from('destination_catalog')
+          .select(
+            'id, slug, name, region, country, category, description, image_url, best_time_to_visit, highlights, travel_tips, is_featured'
+          )
+          .order('is_featured', { ascending: false })
+          .order('name', { ascending: true });
 
-          if (queryError) {
-            throw new Error(queryError.message);
-          }
+        if (error) {
+          throw new Error(error.message);
+        }
 
-          const names = new Map<string, string>();
+        const rows = (data ?? []) as unknown as Destination[];
 
-          for (const item of data ?? []) {
-            const name = item.destination?.trim();
-
-            if (name && !names.has(name.toLowerCase())) {
-              names.set(name.toLowerCase(), name);
-            }
-          }
-
-          if (active) {
-            setPopular(Array.from(names.values()).slice(0, 6));
-          }
-        } else {
-          const { data, error: queryError } = await supabase
-            .from('trips')
-            .select(
-              'id, name, destination, start_date, end_date, created_by'
-            )
-            .gte('end_date', today)
-            .ilike('destination', `%${destination}%`)
-            .order('start_date', { ascending: true });
-
-          if (queryError) {
-            throw new Error(queryError.message);
-          }
-
-          const results: Trip[] = await Promise.all(
-            (data ?? []).map(async (trip) => {
-              const { data: places, error: placesError } =
-                await supabase
-                  .from('trip_destinations')
-                  .select('id, name, visited')
-                  .eq('trip_id', trip.id)
-                  .order('created_at', { ascending: true });
-
-              if (placesError) {
-                throw new Error(placesError.message);
-              }
-
-              return {
-                ...trip,
-                destinations: places ?? [],
-              };
-            })
+        if (active) {
+          setCatalogue(
+            rows.map((item) => ({
+              ...item,
+              highlights: item.highlights ?? [],
+              travel_tips: item.travel_tips ?? [],
+            }))
           );
-
-          if (active) {
-            setTrips(results);
-          }
         }
       } catch (err) {
         if (active) {
-          setError(
+          setCatalogueError(
             err instanceof Error
               ? err.message
               : 'Unable to load destinations.'
@@ -125,40 +164,208 @@ export default function ExploreScreen() {
         }
       } finally {
         if (active) {
-          setLoading(false);
+          setCatalogueLoading(false);
         }
       }
     }
 
-    void load();
+    void loadCatalogue();
 
     return () => {
       active = false;
     };
-  }, [destination, refresh, today]);
+  }, [catalogueRefresh]);
 
-  function searchDestination(value: string) {
+  useEffect(() => {
+    let active = true;
+
+    if (!tripDestination) return;
+
+    async function loadTrips() {
+      setTripsLoading(true);
+      setTripsError('');
+
+      try {
+        const escapedDestination = tripDestination.replace(
+          /[\\%_]/g,
+          '\\$&'
+        );
+
+        const { data, error } = await supabase
+          .from('trips')
+          .select(
+            'id, name, destination, start_date, end_date, created_by'
+          )
+          .gte('end_date', today)
+          .ilike('destination', `%${escapedDestination}%`)
+          .order('start_date', { ascending: true });
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        const tripRows =
+          (data ?? []) as Omit<Trip, 'destinations'>[];
+
+        const ids = tripRows.map((trip) => trip.id);
+        const placesByTrip = new Map<string, Place[]>();
+
+        if (ids.length > 0) {
+          const { data: places, error: placesError } = await supabase
+            .from('trip_destinations')
+            .select('id, trip_id, name, visited')
+            .in('trip_id', ids)
+            .order('created_at', { ascending: true });
+
+          if (placesError) {
+            throw new Error(placesError.message);
+          }
+
+          for (const place of places ?? []) {
+            if (!place.trip_id) continue;
+
+            const existing =
+              placesByTrip.get(place.trip_id) ?? [];
+
+            existing.push({
+              id: place.id,
+              name: place.name,
+              visited: place.visited === true,
+            });
+
+            placesByTrip.set(place.trip_id, existing);
+          }
+        }
+
+        if (active) {
+          setTrips(
+            tripRows.map((trip) => ({
+              ...trip,
+              destinations: placesByTrip.get(trip.id) ?? [],
+            }))
+          );
+        }
+      } catch (err) {
+        if (active) {
+          setTrips([]);
+          setTripsError(
+            err instanceof Error
+              ? err.message
+              : 'Unable to load trips.'
+          );
+        }
+      } finally {
+        if (active) {
+          setTripsLoading(false);
+        }
+      }
+    }
+
+    void loadTrips();
+
+    return () => {
+      active = false;
+    };
+  }, [tripDestination, tripsRefresh, today]);
+
+  const query = search.trim().toLowerCase();
+
+  const filteredDestinations = catalogue.filter((item) => {
+    const matchesCategory =
+      category === 'all' || item.category === category;
+
+    const searchableText = [
+      item.name,
+      item.region,
+      item.country,
+      item.category,
+      item.description,
+      ...item.highlights,
+    ]
+      .join(' ')
+      .toLowerCase();
+
+    return matchesCategory && searchableText.includes(query);
+  });
+
+  function findTrips(value: string) {
     const name = value.trim();
 
     if (!name) return;
 
-    setLoading(true);
-    setSearch(name);
-    setDestination(name);
-    setRefresh((current) => current + 1);
+    setSelectedDestination(null);
+    setTrips([]);
+    setTripsError('');
+    setTripsLoading(true);
+    setTripDestination(name);
+    setTripsRefresh((current) => current + 1);
   }
 
-  function clearSearch() {
-    setLoading(true);
-    setSearch('');
-    setDestination('');
+  function backToDestinations() {
+    setTripDestination('');
     setTrips([]);
-    setRefresh((current) => current + 1);
+    setTripsError('');
+    setTripsLoading(false);
+  }
+
+  function planTripHere(name: string) {
+    setSelectedDestination(null);
+
+    router.push({
+      pathname: '/create-trip',
+      params: {
+        destination: name,
+        planningKey: Date.now().toString(),
+      },
+    });
+  }
+
+  function renderDestination({ item }: { item: Destination }) {
+    return (
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel={`Explore ${item.name}`}
+        style={styles.destinationCard}
+        onPress={() => setSelectedDestination(item)}
+      >
+        <DestinationPhoto
+          uri={item.image_url}
+          name={item.name}
+        />
+
+        <View style={styles.cardContent}>
+          <View style={styles.badgeRow}>
+            <Text style={styles.badge}>
+              {categoryLabel(item.category)}
+            </Text>
+
+            {item.is_featured && (
+              <Text style={styles.featured}>Featured</Text>
+            )}
+          </View>
+
+          <Text style={styles.cardTitle}>{item.name}</Text>
+
+          <Text style={styles.secondary}>
+            {[item.region, item.country]
+              .filter(Boolean)
+              .join(', ')}
+          </Text>
+
+          <Text style={styles.body} numberOfLines={3}>
+            {item.description}
+          </Text>
+
+          <Text style={styles.link}>View Destination →</Text>
+        </View>
+      </TouchableOpacity>
+    );
   }
 
   function renderTrip({ item }: { item: Trip }) {
     return (
       <TouchableOpacity
+        accessibilityRole="button"
         style={styles.card}
         onPress={() =>
           router.push(`/trip-details?tripId=${item.id}`)
@@ -171,7 +378,11 @@ export default function ExploreScreen() {
         </Text>
 
         <Text style={styles.link}>
-          {item.start_date > today ? 'Upcoming' : 'Ongoing'}
+          {!item.start_date
+            ? 'Start date not specified'
+            : item.start_date > today
+              ? 'Upcoming'
+              : 'Ongoing'}
         </Text>
 
         <View style={styles.divider} />
@@ -179,12 +390,16 @@ export default function ExploreScreen() {
         <View style={styles.dateRow}>
           <View>
             <Text style={styles.label}>START</Text>
-            <Text style={styles.value}>{item.start_date}</Text>
+            <Text style={styles.value}>
+              {item.start_date || 'Not specified'}
+            </Text>
           </View>
 
           <View>
             <Text style={styles.label}>END</Text>
-            <Text style={styles.value}>{item.end_date}</Text>
+            <Text style={styles.value}>
+              {item.end_date || 'Not specified'}
+            </Text>
           </View>
         </View>
 
@@ -238,7 +453,9 @@ export default function ExploreScreen() {
           <TouchableOpacity
             key={tab}
             accessibilityRole="tab"
-            accessibilityState={{ selected: section === tab }}
+            accessibilityState={{
+              selected: section === tab,
+            }}
             style={[
               styles.tab,
               section === tab && styles.activeTab,
@@ -251,7 +468,9 @@ export default function ExploreScreen() {
                 section === tab && styles.activeTabText,
               ]}
             >
-              {tab === 'destinations' ? 'Destinations' : 'Companions'}
+              {tab === 'destinations'
+                ? 'Destinations'
+                : 'Companions'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -259,68 +478,67 @@ export default function ExploreScreen() {
 
       {section === 'companions' ? (
         <CompanionDiscoveryPanel />
-      ) : (
+      ) : tripDestination ? (
         <View style={styles.flex}>
-          <View style={styles.searchRow}>
-            <TextInput
-              accessibilityLabel="Search active trips by destination"
-              style={styles.input}
-              placeholder="Where are you going?"
-              placeholderTextColor="#9299A8"
-              value={search}
-              onChangeText={setSearch}
-              onSubmitEditing={() => searchDestination(search)}
-              returnKeyType="search"
-            />
-
-            <TouchableOpacity
-              style={styles.searchButton}
-              onPress={() => searchDestination(search)}
-            >
-              <Text style={styles.buttonText}>Search</Text>
-            </TouchableOpacity>
-          </View>
-
-          {destination ? (
-            <View style={styles.resultsHeader}>
-              <View style={styles.flex}>
-                <Text style={styles.label}>
-                  ACTIVE TRIPS GOING TO
-                </Text>
-                <Text style={styles.resultsTitle}>
-                  {destination}
-                </Text>
-              </View>
-
-              <TouchableOpacity onPress={clearSearch}>
-                <Text style={styles.link}>Clear</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <Text style={styles.sectionTitle}>
-              Destinations with Active Trips
+          <TouchableOpacity
+            accessibilityRole="button"
+            onPress={backToDestinations}
+          >
+            <Text style={styles.backText}>
+              ← Back to Destinations
             </Text>
-          )}
+          </TouchableOpacity>
 
-          {loading ? (
+          <Text style={styles.label}>
+            UPCOMING AND ONGOING TRIPS TO
+          </Text>
+
+          <Text style={styles.resultsTitle}>
+            {tripDestination}
+          </Text>
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            style={styles.secondaryButton}
+            onPress={() => planTripHere(tripDestination)}
+          >
+            <Text style={styles.buttonText}>
+              Plan Your Own Trip Here
+            </Text>
+          </TouchableOpacity>
+
+          {tripsLoading ? (
             <View style={styles.empty}>
-              <ActivityIndicator size="large" color="#4F8CFF" />
-              <Text style={styles.secondary}>Loading...</Text>
+              <ActivityIndicator
+                size="large"
+                color="#4F8CFF"
+              />
+              <Text style={styles.secondary}>
+                Finding trips...
+              </Text>
             </View>
-          ) : error ? (
+          ) : tripsError ? (
             <View style={styles.empty}>
-              <Text style={styles.error}>{error}</Text>
+              <Text style={styles.error}>{tripsError}</Text>
 
               <TouchableOpacity
-                onPress={() => setRefresh((current) => current + 1)}
+                accessibilityRole="button"
+                onPress={() =>
+                  setTripsRefresh((current) => current + 1)
+                }
               >
                 <Text style={styles.link}>Try Again</Text>
               </TouchableOpacity>
             </View>
-          ) : destination ? (
+          ) : (
             <FlatList
               key="trips"
-              data={trips.filter((trip) => trip.end_date >= today)}
+              style={styles.tripList}
+              data={trips.filter(
+                (trip) =>
+                  trip.end_date !== null &&
+                  trip.end_date >= today
+              )}
               keyExtractor={(item) => item.id}
               renderItem={renderTrip}
               contentContainerStyle={styles.list}
@@ -330,43 +548,305 @@ export default function ExploreScreen() {
                   <Text style={styles.cardTitle}>
                     No active trips found
                   </Text>
-                  <Text style={styles.secondary}>
-                    Try another destination. Completed trips are hidden here.
-                  </Text>
-                </View>
-              }
-            />
-          ) : (
-            <FlatList
-              key="destinations"
-              data={popular}
-              numColumns={2}
-              keyExtractor={(item) => item}
-              contentContainerStyle={styles.list}
-              columnWrapperStyle={styles.gridRow}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.destinationCard}
-                  onPress={() => searchDestination(item)}
-                >
-                  <Text style={styles.destinationIcon}>📍</Text>
-                  <Text style={styles.cardTitle}>{item}</Text>
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                <View style={styles.empty}>
-                  <Text style={styles.cardTitle}>
-                    No active trips yet
-                  </Text>
-                  <Text style={styles.secondary}>
-                    Create a new trip to see its destination here.
+
+                  <Text style={styles.emptyText}>
+                    No upcoming or ongoing trips match this destination.
+                    You can plan your own trip using the button above.
                   </Text>
                 </View>
               }
             />
           )}
         </View>
+      ) : (
+        <View style={styles.flex}>
+          <TextInput
+            accessibilityLabel="Search destinations"
+            style={styles.input}
+            placeholder="Search destinations, regions, highlights..."
+            placeholderTextColor="#9299A8"
+            value={search}
+            onChangeText={setSearch}
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+
+          {!!search.trim() && (
+            <View style={styles.searchActions}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                style={styles.findTripsButton}
+                onPress={() => findTrips(search)}
+              >
+                <Text style={styles.buttonText}>
+                  Find Trips to “{search.trim()}”
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                accessibilityRole="button"
+                style={styles.clearButton}
+                onPress={() => setSearch('')}
+              >
+                <Text style={styles.closeText}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categories}
+              keyboardShouldPersistTaps="handled"
+            >
+              {CATEGORIES.map((item) => (
+                <TouchableOpacity
+                  key={item.value}
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    selected: category === item.value,
+                  }}
+                  style={[
+                    styles.categoryChip,
+                    category === item.value &&
+                      styles.selectedCategory,
+                  ]}
+                  onPress={() => setCategory(item.value)}
+                >
+                  <Text style={styles.buttonText}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {catalogueLoading ? (
+            <View style={styles.empty}>
+              <ActivityIndicator
+                size="large"
+                color="#4F8CFF"
+              />
+              <Text style={styles.secondary}>
+                Loading destinations...
+              </Text>
+            </View>
+          ) : catalogueError ? (
+            <View style={styles.empty}>
+              <Text style={styles.error}>
+                {catalogueError}
+              </Text>
+
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={() =>
+                  setCatalogueRefresh((current) => current + 1)
+                }
+              >
+                <Text style={styles.link}>Try Again</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <FlatList
+              key="destinations"
+              data={filteredDestinations}
+              keyExtractor={(item) => item.id}
+              renderItem={renderDestination}
+              contentContainerStyle={styles.list}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              onRefresh={() =>
+                setCatalogueRefresh((current) => current + 1)
+              }
+              refreshing={catalogueLoading}
+              ListHeaderComponent={
+                <View>
+                  <RecommendedDestinations
+                    destinations={filteredDestinations}
+                    onSelect={(item) =>
+                      setSelectedDestination(item)
+                    }
+                  />
+
+                  <Text style={styles.resultCount}>
+                    All Results · {filteredDestinations.length} destinations
+                  </Text>
+                </View>
+              }
+              ListEmptyComponent={
+                <View style={styles.empty}>
+                  <Text style={styles.cardTitle}>
+                    {catalogue.length === 0
+                      ? 'No destinations available yet'
+                      : 'No matching destinations'}
+                  </Text>
+
+                  <Text style={styles.emptyText}>
+                    {catalogue.length === 0
+                      ? 'The destination catalogue is empty. You can still enter a destination above and find existing trips.'
+                      : 'Try another search or category. You can also use Find Trips above to search trips directly.'}
+                  </Text>
+
+                  {(!!search || category !== 'all') && (
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      onPress={() => {
+                        setSearch('');
+                        setCategory('all');
+                      }}
+                    >
+                      <Text style={styles.link}>
+                        Reset Filters
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              }
+            />
+          )}
+        </View>
       )}
+
+      <Modal
+        visible={selectedDestination !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedDestination(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View
+            style={styles.modalCard}
+            accessibilityViewIsModal
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.cardTitle}>
+                Destination Details
+              </Text>
+
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Close destination details"
+                onPress={() => setSelectedDestination(null)}
+              >
+                <Text style={styles.closeText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+
+            {selectedDestination && (
+              <ScrollView
+                contentContainerStyle={styles.modalContent}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                <DestinationPhoto
+                  uri={selectedDestination.image_url}
+                  name={selectedDestination.name}
+                />
+
+                <Text style={styles.detailTitle}>
+                  {selectedDestination.name}
+                </Text>
+
+                <Text style={styles.secondary}>
+                  {[
+                    selectedDestination.region,
+                    selectedDestination.country,
+                  ]
+                    .filter(Boolean)
+                    .join(', ')}
+                </Text>
+
+                <Text style={styles.link}>
+                  {categoryLabel(selectedDestination.category)}
+                  {selectedDestination.is_featured
+                    ? ' · Featured'
+                    : ''}
+                </Text>
+
+                <Text style={styles.body}>
+                  {selectedDestination.description}
+                </Text>
+
+                <Text style={styles.detailHeading}>
+                  Best Time to Visit
+                </Text>
+
+                <Text style={styles.body}>
+                  {selectedDestination.best_time_to_visit ||
+                    'Not specified yet.'}
+                </Text>
+
+                <Text style={styles.detailHeading}>
+                  Highlights
+                </Text>
+
+                {selectedDestination.highlights.length > 0 ? (
+                  selectedDestination.highlights.map(
+                    (highlight, index) => (
+                      <Text
+                        key={`${index}-${highlight}`}
+                        style={styles.body}
+                      >
+                        • {highlight}
+                      </Text>
+                    )
+                  )
+                ) : (
+                  <Text style={styles.secondary}>
+                    No highlights added yet.
+                  </Text>
+                )}
+
+                <Text style={styles.detailHeading}>
+                  Travel Tips
+                </Text>
+
+                {selectedDestination.travel_tips.length > 0 ? (
+                  selectedDestination.travel_tips.map(
+                    (tip, index) => (
+                      <Text
+                        key={`${index}-${tip}`}
+                        style={styles.body}
+                      >
+                        • {tip}
+                      </Text>
+                    )
+                  )
+                ) : (
+                  <Text style={styles.secondary}>
+                    No travel tips added yet.
+                  </Text>
+                )}
+
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  style={styles.primaryButton}
+                  onPress={() =>
+                    planTripHere(selectedDestination.name)
+                  }
+                >
+                  <Text style={styles.buttonText}>
+                    Plan a Trip Here
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  style={styles.secondaryButton}
+                  onPress={() =>
+                    findTrips(selectedDestination.name)
+                  }
+                >
+                  <Text style={styles.buttonText}>
+                    Find Trips Here
+                  </Text>
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -378,40 +858,53 @@ const styles = StyleSheet.create({
     padding: 22,
     paddingTop: 28,
   },
-  flex: { flex: 1 },
+
+  flex: {
+    flex: 1,
+  },
+
   title: {
     fontSize: 29,
     fontWeight: '800',
     color: '#F7F8FC',
   },
+
   subtitle: {
     color: '#9299A8',
     marginTop: 7,
     marginBottom: 20,
     lineHeight: 20,
   },
+
   tabs: {
     flexDirection: 'row',
     backgroundColor: '#151821',
     borderRadius: 14,
     padding: 5,
-    marginBottom: 20,
+    marginBottom: 18,
   },
+
   tab: {
     flex: 1,
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
   },
-  activeTab: { backgroundColor: '#4F8CFF' },
-  tabText: { color: '#9299A8', fontWeight: '700' },
-  activeTabText: { color: '#FFFFFF' },
-  searchRow: {
-    flexDirection: 'row',
-    marginBottom: 20,
+
+  activeTab: {
+    backgroundColor: '#4F8CFF',
   },
+
+  tabText: {
+    color: '#9299A8',
+    fontWeight: '700',
+  },
+
+  activeTabText: {
+    color: '#FFFFFF',
+  },
+
   input: {
-    flex: 1,
     color: '#F7F8FC',
     backgroundColor: '#151821',
     borderWidth: 1,
@@ -420,47 +913,118 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 14,
   },
-  searchButton: {
-    justifyContent: 'center',
-    backgroundColor: '#4F8CFF',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    marginLeft: 9,
-  },
-  buttonText: { color: '#FFFFFF', fontWeight: '700' },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#F7F8FC',
-    marginBottom: 15,
-  },
-  resultsHeader: {
+
+  searchActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 18,
+    marginTop: 10,
   },
-  resultsTitle: {
-    color: '#F7F8FC',
-    fontSize: 23,
+
+  findTripsButton: {
+    flex: 1,
+    backgroundColor: '#293F64',
+    borderRadius: 10,
+    padding: 12,
+  },
+
+  clearButton: {
+    padding: 12,
+  },
+
+  buttonText: {
+    color: '#FFFFFF',
     fontWeight: '700',
-    marginTop: 5,
+    textAlign: 'center',
   },
-  list: { paddingBottom: 30 },
-  gridRow: { justifyContent: 'space-between' },
+
+  categories: {
+    paddingVertical: 16,
+  },
+
+  categoryChip: {
+    borderWidth: 1,
+    borderColor: '#252A37',
+    backgroundColor: '#151821',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginRight: 8,
+  },
+
+  selectedCategory: {
+    backgroundColor: '#293F64',
+    borderColor: '#4F8CFF',
+  },
+
+  resultCount: {
+    color: '#9299A8',
+    marginBottom: 12,
+  },
+
+  list: {
+    paddingBottom: 30,
+  },
+
+  tripList: {
+    marginTop: 16,
+  },
+
   destinationCard: {
-    width: '48%',
-    minHeight: 105,
     backgroundColor: '#151821',
     borderRadius: 17,
-    padding: 17,
-    marginBottom: 12,
+    overflow: 'hidden',
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#252A37',
   },
-  destinationIcon: {
-    fontSize: 22,
+
+  photo: {
+    width: '100%',
+    height: 180,
+    backgroundColor: '#202D49',
+    borderRadius: 12,
+  },
+
+  photoFallback: {
+    height: 150,
+    backgroundColor: '#202D49',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+  },
+
+  photoIcon: {
+    fontSize: 30,
+    marginBottom: 8,
+  },
+
+  cardContent: {
+    padding: 18,
+  },
+
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
     marginBottom: 10,
   },
+
+  badge: {
+    color: '#A9C5FF',
+    backgroundColor: '#243450',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginRight: 10,
+    fontSize: 12,
+  },
+
+  featured: {
+    color: '#EAC875',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
   card: {
     backgroundColor: '#151821',
     borderRadius: 18,
@@ -469,45 +1033,60 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#252A37',
   },
+
   cardTitle: {
     color: '#F7F8FC',
     fontSize: 17,
     fontWeight: '700',
   },
+
   secondary: {
     color: '#9299A8',
     marginTop: 7,
     lineHeight: 20,
   },
+
+  body: {
+    color: '#D7DBE5',
+    marginTop: 10,
+    lineHeight: 22,
+  },
+
   divider: {
     height: 1,
     backgroundColor: '#292E3B',
     marginVertical: 16,
   },
+
   dateRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+
   label: {
     color: '#858D9D',
     fontSize: 10,
     fontWeight: '700',
   },
+
   value: {
     color: '#D7DBE5',
     fontSize: 13,
     marginTop: 6,
   },
+
   smallTitle: {
     color: '#F7F8FC',
     fontWeight: '700',
     marginBottom: 10,
   },
+
   placeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 7,
   },
+
   checkbox: {
     width: 19,
     height: 19,
@@ -518,34 +1097,132 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 9,
   },
+
   checked: {
     backgroundColor: '#4F8CFF',
     borderColor: '#4F8CFF',
   },
+
   checkmark: {
     color: '#FFFFFF',
     fontSize: 12,
   },
+
   placeName: {
     flex: 1,
     color: '#D7DBE5',
     fontSize: 13,
   },
+
   visited: {
     color: '#777F90',
     textDecorationLine: 'line-through',
   },
+
   link: {
     color: '#75A2FF',
     fontWeight: '700',
     marginTop: 12,
   },
+
+  backText: {
+    color: '#75A2FF',
+    fontWeight: '700',
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+
+  resultsTitle: {
+    color: '#F7F8FC',
+    fontSize: 23,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+
   empty: {
     padding: 24,
     alignItems: 'center',
   },
+
+  emptyText: {
+    color: '#9299A8',
+    marginTop: 10,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+
   error: {
     color: '#FF9B9B',
     textAlign: 'center',
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+
+  modalCard: {
+    width: '100%',
+    maxWidth: 600,
+    maxHeight: '90%',
+    backgroundColor: '#151821',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#252A37',
+    overflow: 'hidden',
+  },
+
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#252A37',
+  },
+
+  closeText: {
+    color: '#75A2FF',
+    fontWeight: '700',
+  },
+
+  modalContent: {
+    padding: 18,
+    paddingBottom: 32,
+  },
+
+  detailTitle: {
+    color: '#F7F8FC',
+    fontSize: 26,
+    fontWeight: '800',
+    marginTop: 18,
+  },
+
+  detailHeading: {
+    color: '#F7F8FC',
+    fontSize: 17,
+    fontWeight: '700',
+    marginTop: 24,
+  },
+
+  primaryButton: {
+    backgroundColor: '#4F8CFF',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 24,
+  },
+
+  secondaryButton: {
+    backgroundColor: '#252A37',
+    borderWidth: 1,
+    borderColor: '#3B4354',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 12,
   },
 });
