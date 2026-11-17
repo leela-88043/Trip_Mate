@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -46,6 +47,7 @@ type Trip = {
   start_date: string | null;
   end_date: string | null;
   created_by: string | null;
+  categories: string[];
   destinations: Place[];
 };
 
@@ -61,9 +63,7 @@ const CATEGORIES = [
 ];
 
 function categoryLabel(value: string) {
-  return (
-    CATEGORIES.find((item) => item.value === value)?.label ?? value
-  );
+  return CATEGORIES.find((item) => item.value === value)?.label ?? value;
 }
 
 function DestinationPhoto({
@@ -102,9 +102,9 @@ function DestinationPhoto({
 export default function ExploreScreen() {
   const today = useTripToday();
 
-  const [section, setSection] = useState<
-    'destinations' | 'companions'
-  >('destinations');
+  const [section, setSection] = useState<'destinations' | 'companions'>(
+    'destinations'
+  );
 
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
@@ -117,12 +117,20 @@ export default function ExploreScreen() {
   const [selectedDestination, setSelectedDestination] =
     useState<Destination | null>(null);
 
+  // Trips displayed using the shared category filters
+  const [discoveryTrips, setDiscoveryTrips] = useState<Trip[]>([]);
+  const [discoveryTripsLoading, setDiscoveryTripsLoading] = useState(false);
+  const [discoveryTripsError, setDiscoveryTripsError] = useState('');
+  const [discoveryTripsRefresh, setDiscoveryTripsRefresh] = useState(0);
+
+  // Existing destination-specific trip states
   const [tripDestination, setTripDestination] = useState('');
   const [trips, setTrips] = useState<Trip[]>([]);
   const [tripsLoading, setTripsLoading] = useState(false);
   const [tripsError, setTripsError] = useState('');
   const [tripsRefresh, setTripsRefresh] = useState(0);
 
+  // Load destination catalogue
   useEffect(() => {
     let active = true;
 
@@ -139,9 +147,7 @@ export default function ExploreScreen() {
           .order('is_featured', { ascending: false })
           .order('name', { ascending: true });
 
-        if (error) {
-          throw new Error(error.message);
-        }
+        if (error) throw new Error(error.message);
 
         const rows = (data ?? []) as unknown as Destination[];
 
@@ -157,15 +163,11 @@ export default function ExploreScreen() {
       } catch (err) {
         if (active) {
           setCatalogueError(
-            err instanceof Error
-              ? err.message
-              : 'Unable to load destinations.'
+            err instanceof Error ? err.message : 'Unable to load destinations.'
           );
         }
       } finally {
-        if (active) {
-          setCatalogueLoading(false);
-        }
+        if (active) setCatalogueLoading(false);
       }
     }
 
@@ -176,6 +178,87 @@ export default function ExploreScreen() {
     };
   }, [catalogueRefresh]);
 
+  // Load all upcoming and ongoing trips
+  useEffect(() => {
+    let active = true;
+
+    async function loadDiscoveryTrips() {
+      setDiscoveryTripsLoading(true);
+      setDiscoveryTripsError('');
+
+      try {
+        const { data, error } = await supabase
+          .from('trips')
+          .select(
+            'id, name, destination, start_date, end_date, created_by, categories'
+          )
+          .gte('end_date', today)
+          .order('start_date', { ascending: true });
+
+        if (error) throw new Error(error.message);
+
+        const tripRows = (data ?? []).map((trip) => ({
+          ...trip,
+          categories: Array.isArray(trip.categories)
+            ? trip.categories
+            : [],
+        })) as Omit<Trip, 'destinations'>[];
+
+        const ids = tripRows.map((trip) => trip.id);
+        const placesByTrip = new Map<string, Place[]>();
+
+        if (ids.length > 0) {
+          const { data: places, error: placesError } = await supabase
+            .from('trip_destinations')
+            .select('id, trip_id, name, visited')
+            .in('trip_id', ids)
+            .order('created_at', { ascending: true });
+
+          if (placesError) throw new Error(placesError.message);
+
+          for (const place of places ?? []) {
+            if (!place.trip_id) continue;
+
+            const existing = placesByTrip.get(place.trip_id) ?? [];
+
+            existing.push({
+              id: place.id,
+              name: place.name,
+              visited: place.visited === true,
+            });
+
+            placesByTrip.set(place.trip_id, existing);
+          }
+        }
+
+        if (active) {
+          setDiscoveryTrips(
+            tripRows.map((trip) => ({
+              ...trip,
+              destinations: placesByTrip.get(trip.id) ?? [],
+            }))
+          );
+        }
+      } catch (err) {
+        if (active) {
+          setDiscoveryTrips([]);
+          setDiscoveryTripsError(
+            err instanceof Error ? err.message : 'Unable to load trips.'
+          );
+        }
+      } finally {
+        if (active) setDiscoveryTripsLoading(false);
+      }
+    }
+
+    void loadDiscoveryTrips();
+
+    return () => {
+      active = false;
+    };
+  }, [discoveryTripsRefresh, today]);
+
+  // Load trips for a selected destination
   useEffect(() => {
     let active = true;
 
@@ -194,18 +277,20 @@ export default function ExploreScreen() {
         const { data, error } = await supabase
           .from('trips')
           .select(
-            'id, name, destination, start_date, end_date, created_by'
+            'id, name, destination, start_date, end_date, created_by, categories'
           )
           .gte('end_date', today)
           .ilike('destination', `%${escapedDestination}%`)
           .order('start_date', { ascending: true });
 
-        if (error) {
-          throw new Error(error.message);
-        }
+        if (error) throw new Error(error.message);
 
-        const tripRows =
-          (data ?? []) as Omit<Trip, 'destinations'>[];
+        const tripRows = (data ?? []).map((trip) => ({
+          ...trip,
+          categories: Array.isArray(trip.categories)
+            ? trip.categories
+            : [],
+        })) as Omit<Trip, 'destinations'>[];
 
         const ids = tripRows.map((trip) => trip.id);
         const placesByTrip = new Map<string, Place[]>();
@@ -217,15 +302,12 @@ export default function ExploreScreen() {
             .in('trip_id', ids)
             .order('created_at', { ascending: true });
 
-          if (placesError) {
-            throw new Error(placesError.message);
-          }
+          if (placesError) throw new Error(placesError.message);
 
           for (const place of places ?? []) {
             if (!place.trip_id) continue;
 
-            const existing =
-              placesByTrip.get(place.trip_id) ?? [];
+            const existing = placesByTrip.get(place.trip_id) ?? [];
 
             existing.push({
               id: place.id,
@@ -249,15 +331,11 @@ export default function ExploreScreen() {
         if (active) {
           setTrips([]);
           setTripsError(
-            err instanceof Error
-              ? err.message
-              : 'Unable to load trips.'
+            err instanceof Error ? err.message : 'Unable to load trips.'
           );
         }
       } finally {
-        if (active) {
-          setTripsLoading(false);
-        }
+        if (active) setTripsLoading(false);
       }
     }
 
@@ -270,6 +348,7 @@ export default function ExploreScreen() {
 
   const query = search.trim().toLowerCase();
 
+  // Filter destinations
   const filteredDestinations = catalogue.filter((item) => {
     const matchesCategory =
       category === 'all' || item.category === category;
@@ -288,9 +367,25 @@ export default function ExploreScreen() {
     return matchesCategory && searchableText.includes(query);
   });
 
+  // Filter trips using the same category and search
+  const filteredDiscoveryTrips = discoveryTrips.filter((trip) => {
+    const matchesCategory =
+      category === 'all' || trip.categories.includes(category);
+
+    const searchableText = [
+      trip.name,
+      trip.destination,
+      ...trip.categories,
+      ...trip.destinations.map((place) => place.name),
+    ]
+      .join(' ')
+      .toLowerCase();
+
+    return matchesCategory && searchableText.includes(query);
+  });
+
   function findTrips(value: string) {
     const name = value.trim();
-
     if (!name) return;
 
     setSelectedDestination(null);
@@ -328,16 +423,11 @@ export default function ExploreScreen() {
         style={styles.destinationCard}
         onPress={() => setSelectedDestination(item)}
       >
-        <DestinationPhoto
-          uri={item.image_url}
-          name={item.name}
-        />
+        <DestinationPhoto uri={item.image_url} name={item.name} />
 
         <View style={styles.cardContent}>
           <View style={styles.badgeRow}>
-            <Text style={styles.badge}>
-              {categoryLabel(item.category)}
-            </Text>
+            <Text style={styles.badge}>{categoryLabel(item.category)}</Text>
 
             {item.is_featured && (
               <Text style={styles.featured}>Featured</Text>
@@ -347,9 +437,7 @@ export default function ExploreScreen() {
           <Text style={styles.cardTitle}>{item.name}</Text>
 
           <Text style={styles.secondary}>
-            {[item.region, item.country]
-              .filter(Boolean)
-              .join(', ')}
+            {[item.region, item.country].filter(Boolean).join(', ')}
           </Text>
 
           <Text style={styles.body} numberOfLines={3}>
@@ -367,15 +455,23 @@ export default function ExploreScreen() {
       <TouchableOpacity
         accessibilityRole="button"
         style={styles.card}
-        onPress={() =>
-          router.push(`/trip-details?tripId=${item.id}`)
-        }
+        onPress={() => router.push(`/trip-details?tripId=${item.id}`)}
       >
         <Text style={styles.cardTitle}>{item.name}</Text>
 
-        <Text style={styles.secondary}>
-          📍 {item.destination}
-        </Text>
+        <Text style={styles.secondary}>📍 {item.destination}</Text>
+
+        {item.categories.length > 0 && (
+          <View style={styles.tripCategoryRow}>
+            {item.categories.map((value) => (
+              <View key={value} style={styles.tripCategoryBadge}>
+                <Text style={styles.tripCategoryText}>
+                  {categoryLabel(value)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         <Text style={styles.link}>
           {!item.start_date
@@ -440,6 +536,73 @@ export default function ExploreScreen() {
     );
   }
 
+  // Header shown inside the destination list
+  const destinationsHeader = (
+    <View>
+      <View style={styles.tripSectionHeader}>
+        <View>
+          <Text style={styles.sectionTitle}>Trips to Explore</Text>
+          <Text style={styles.secondary}>
+            Trips matching your selected category
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          accessibilityRole="button"
+          onPress={() => router.push('/create-trip')}
+        >
+          <Text style={styles.link}>+ Create Trip</Text>
+        </TouchableOpacity>
+      </View>
+
+      {discoveryTripsLoading ? (
+        <ActivityIndicator
+          size="small"
+          color="#4F8CFF"
+          style={styles.tripLoader}
+        />
+      ) : discoveryTripsError ? (
+        <View style={styles.empty}>
+          <Text style={styles.error}>{discoveryTripsError}</Text>
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            onPress={() =>
+              setDiscoveryTripsRefresh((current) => current + 1)
+            }
+          >
+            <Text style={styles.link}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      ) : filteredDiscoveryTrips.length === 0 ? (
+        <Text style={styles.emptyText}>
+          No trips match this category yet. Be the first to create one!
+        </Text>
+      ) : (
+        filteredDiscoveryTrips.map((trip) => (
+          <View key={trip.id}>{renderTrip({ item: trip })}</View>
+        ))
+      )}
+
+      <View style={styles.destinationSectionHeader}>
+        <Text style={styles.sectionTitle}>Explore Destinations</Text>
+        <Text style={styles.secondary}>
+          Discover places for your next journey
+        </Text>
+      </View>
+
+      <RecommendedDestinations
+        destinations={filteredDestinations}
+        onSelect={(item) => setSelectedDestination(item)}
+      />
+
+      <Text style={styles.resultCount}>
+        {filteredDestinations.length} destinations ·{' '}
+        {filteredDiscoveryTrips.length} trips
+      </Text>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Explore</Text>
@@ -448,14 +611,13 @@ export default function ExploreScreen() {
         Discover destinations and find your travel companions.
       </Text>
 
+      {/* Only two tabs */}
       <View style={styles.tabs}>
         {(['destinations', 'companions'] as const).map((tab) => (
           <TouchableOpacity
             key={tab}
             accessibilityRole="tab"
-            accessibilityState={{
-              selected: section === tab,
-            }}
+            accessibilityState={{ selected: section === tab }}
             style={[
               styles.tab,
               section === tab && styles.activeTab,
@@ -468,9 +630,7 @@ export default function ExploreScreen() {
                 section === tab && styles.activeTabText,
               ]}
             >
-              {tab === 'destinations'
-                ? 'Destinations'
-                : 'Companions'}
+              {tab === 'destinations' ? 'Destinations' : 'Companions'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -484,38 +644,24 @@ export default function ExploreScreen() {
             accessibilityRole="button"
             onPress={backToDestinations}
           >
-            <Text style={styles.backText}>
-              ← Back to Destinations
-            </Text>
+            <Text style={styles.backText}>← Back to Destinations</Text>
           </TouchableOpacity>
 
-          <Text style={styles.label}>
-            UPCOMING AND ONGOING TRIPS TO
-          </Text>
-
-          <Text style={styles.resultsTitle}>
-            {tripDestination}
-          </Text>
+          <Text style={styles.label}>UPCOMING AND ONGOING TRIPS TO</Text>
+          <Text style={styles.resultsTitle}>{tripDestination}</Text>
 
           <TouchableOpacity
             accessibilityRole="button"
             style={styles.secondaryButton}
             onPress={() => planTripHere(tripDestination)}
           >
-            <Text style={styles.buttonText}>
-              Plan Your Own Trip Here
-            </Text>
+            <Text style={styles.buttonText}>Plan Your Own Trip Here</Text>
           </TouchableOpacity>
 
           {tripsLoading ? (
             <View style={styles.empty}>
-              <ActivityIndicator
-                size="large"
-                color="#4F8CFF"
-              />
-              <Text style={styles.secondary}>
-                Finding trips...
-              </Text>
+              <ActivityIndicator size="large" color="#4F8CFF" />
+              <Text style={styles.secondary}>Finding trips...</Text>
             </View>
           ) : tripsError ? (
             <View style={styles.empty}>
@@ -535,9 +681,7 @@ export default function ExploreScreen() {
               key="trips"
               style={styles.tripList}
               data={trips.filter(
-                (trip) =>
-                  trip.end_date !== null &&
-                  trip.end_date >= today
+                (trip) => trip.end_date !== null && trip.end_date >= today
               )}
               keyExtractor={(item) => item.id}
               renderItem={renderTrip}
@@ -545,10 +689,7 @@ export default function ExploreScreen() {
               showsVerticalScrollIndicator={false}
               ListEmptyComponent={
                 <View style={styles.empty}>
-                  <Text style={styles.cardTitle}>
-                    No active trips found
-                  </Text>
-
+                  <Text style={styles.cardTitle}>No active trips found</Text>
                   <Text style={styles.emptyText}>
                     No upcoming or ongoing trips match this destination.
                     You can plan your own trip using the button above.
@@ -560,10 +701,11 @@ export default function ExploreScreen() {
         </View>
       ) : (
         <View style={styles.flex}>
+          {/* Search */}
           <TextInput
-            accessibilityLabel="Search destinations"
+            accessibilityLabel="Search destinations and trips"
             style={styles.input}
-            placeholder="Search destinations, regions, highlights..."
+            placeholder="Search destinations, trips, regions..."
             placeholderTextColor="#9299A8"
             value={search}
             onChangeText={setSearch}
@@ -593,50 +735,52 @@ export default function ExploreScreen() {
             </View>
           )}
 
-          <View>
+          {/* Visible category filter bar */}
+          <View style={styles.categoryBar}>
             <ScrollView
               horizontal
-              showsHorizontalScrollIndicator={false}
+              style={styles.categoryScroll}
               contentContainerStyle={styles.categories}
+              showsHorizontalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
             >
-              {CATEGORIES.map((item) => (
-                <TouchableOpacity
-                  key={item.value}
-                  accessibilityRole="button"
-                  accessibilityState={{
-                    selected: category === item.value,
-                  }}
-                  style={[
-                    styles.categoryChip,
-                    category === item.value &&
-                      styles.selectedCategory,
-                  ]}
-                  onPress={() => setCategory(item.value)}
-                >
-                  <Text style={styles.buttonText}>
-                    {item.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {CATEGORIES.map((item) => {
+                const isSelected = category === item.value;
+
+                return (
+                  <TouchableOpacity
+                    key={item.value}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    style={[
+                      styles.categoryChip,
+                      isSelected && styles.selectedCategory,
+                    ]}
+                    onPress={() => setCategory(item.value)}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryText,
+                        isSelected && styles.selectedCategoryText,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
 
           {catalogueLoading ? (
             <View style={styles.empty}>
-              <ActivityIndicator
-                size="large"
-                color="#4F8CFF"
-              />
-              <Text style={styles.secondary}>
-                Loading destinations...
-              </Text>
+              <ActivityIndicator size="large" color="#4F8CFF" />
+              <Text style={styles.secondary}>Loading destinations...</Text>
             </View>
           ) : catalogueError ? (
             <View style={styles.empty}>
-              <Text style={styles.error}>
-                {catalogueError}
-              </Text>
+              <Text style={styles.error}>{catalogueError}</Text>
 
               <TouchableOpacity
                 accessibilityRole="button"
@@ -650,30 +794,19 @@ export default function ExploreScreen() {
           ) : (
             <FlatList
               key="destinations"
+              style={styles.flex}
               data={filteredDestinations}
               keyExtractor={(item) => item.id}
               renderItem={renderDestination}
               contentContainerStyle={styles.list}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              onRefresh={() =>
-                setCatalogueRefresh((current) => current + 1)
-              }
-              refreshing={catalogueLoading}
-              ListHeaderComponent={
-                <View>
-                  <RecommendedDestinations
-                    destinations={filteredDestinations}
-                    onSelect={(item) =>
-                      setSelectedDestination(item)
-                    }
-                  />
-
-                  <Text style={styles.resultCount}>
-                    All Results · {filteredDestinations.length} destinations
-                  </Text>
-                </View>
-              }
+              onRefresh={() => {
+                setCatalogueRefresh((current) => current + 1);
+                setDiscoveryTripsRefresh((current) => current + 1);
+              }}
+              refreshing={catalogueLoading || discoveryTripsLoading}
+              ListHeaderComponent={destinationsHeader}
               ListEmptyComponent={
                 <View style={styles.empty}>
                   <Text style={styles.cardTitle}>
@@ -683,9 +816,7 @@ export default function ExploreScreen() {
                   </Text>
 
                   <Text style={styles.emptyText}>
-                    {catalogue.length === 0
-                      ? 'The destination catalogue is empty. You can still enter a destination above and find existing trips.'
-                      : 'Try another search or category. You can also use Find Trips above to search trips directly.'}
+                    Try another search or category. You can also create a trip.
                   </Text>
 
                   {(!!search || category !== 'all') && (
@@ -696,9 +827,7 @@ export default function ExploreScreen() {
                         setCategory('all');
                       }}
                     >
-                      <Text style={styles.link}>
-                        Reset Filters
-                      </Text>
+                      <Text style={styles.link}>Reset Filters</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -708,6 +837,7 @@ export default function ExploreScreen() {
         </View>
       )}
 
+      {/* Destination details modal */}
       <Modal
         visible={selectedDestination !== null}
         transparent
@@ -715,14 +845,9 @@ export default function ExploreScreen() {
         onRequestClose={() => setSelectedDestination(null)}
       >
         <View style={styles.modalBackdrop}>
-          <View
-            style={styles.modalCard}
-            accessibilityViewIsModal
-          >
+          <View style={styles.modalCard} accessibilityViewIsModal>
             <View style={styles.modalHeader}>
-              <Text style={styles.cardTitle}>
-                Destination Details
-              </Text>
+              <Text style={styles.cardTitle}>Destination Details</Text>
 
               <TouchableOpacity
                 accessibilityRole="button"
@@ -749,70 +874,47 @@ export default function ExploreScreen() {
                 </Text>
 
                 <Text style={styles.secondary}>
-                  {[
-                    selectedDestination.region,
-                    selectedDestination.country,
-                  ]
+                  {[selectedDestination.region, selectedDestination.country]
                     .filter(Boolean)
                     .join(', ')}
                 </Text>
 
                 <Text style={styles.link}>
                   {categoryLabel(selectedDestination.category)}
-                  {selectedDestination.is_featured
-                    ? ' · Featured'
-                    : ''}
+                  {selectedDestination.is_featured ? ' · Featured' : ''}
                 </Text>
 
                 <Text style={styles.body}>
                   {selectedDestination.description}
                 </Text>
 
-                <Text style={styles.detailHeading}>
-                  Best Time to Visit
-                </Text>
-
+                <Text style={styles.detailHeading}>Best Time to Visit</Text>
                 <Text style={styles.body}>
-                  {selectedDestination.best_time_to_visit ||
-                    'Not specified yet.'}
+                  {selectedDestination.best_time_to_visit || 'Not specified yet.'}
                 </Text>
 
-                <Text style={styles.detailHeading}>
-                  Highlights
-                </Text>
+                <Text style={styles.detailHeading}>Highlights</Text>
 
                 {selectedDestination.highlights.length > 0 ? (
-                  selectedDestination.highlights.map(
-                    (highlight, index) => (
-                      <Text
-                        key={`${index}-${highlight}`}
-                        style={styles.body}
-                      >
-                        • {highlight}
-                      </Text>
-                    )
-                  )
+                  selectedDestination.highlights.map((highlight, index) => (
+                    <Text key={`${index}-${highlight}`} style={styles.body}>
+                      • {highlight}
+                    </Text>
+                  ))
                 ) : (
                   <Text style={styles.secondary}>
                     No highlights added yet.
                   </Text>
                 )}
 
-                <Text style={styles.detailHeading}>
-                  Travel Tips
-                </Text>
+                <Text style={styles.detailHeading}>Travel Tips</Text>
 
                 {selectedDestination.travel_tips.length > 0 ? (
-                  selectedDestination.travel_tips.map(
-                    (tip, index) => (
-                      <Text
-                        key={`${index}-${tip}`}
-                        style={styles.body}
-                      >
-                        • {tip}
-                      </Text>
-                    )
-                  )
+                  selectedDestination.travel_tips.map((tip, index) => (
+                    <Text key={`${index}-${tip}`} style={styles.body}>
+                      • {tip}
+                    </Text>
+                  ))
                 ) : (
                   <Text style={styles.secondary}>
                     No travel tips added yet.
@@ -822,25 +924,17 @@ export default function ExploreScreen() {
                 <TouchableOpacity
                   accessibilityRole="button"
                   style={styles.primaryButton}
-                  onPress={() =>
-                    planTripHere(selectedDestination.name)
-                  }
+                  onPress={() => planTripHere(selectedDestination.name)}
                 >
-                  <Text style={styles.buttonText}>
-                    Plan a Trip Here
-                  </Text>
+                  <Text style={styles.buttonText}>Plan a Trip Here</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   accessibilityRole="button"
                   style={styles.secondaryButton}
-                  onPress={() =>
-                    findTrips(selectedDestination.name)
-                  }
+                  onPress={() => findTrips(selectedDestination.name)}
                 >
-                  <Text style={styles.buttonText}>
-                    Find Trips Here
-                  </Text>
+                  <Text style={styles.buttonText}>Find Trips Here</Text>
                 </TouchableOpacity>
               </ScrollView>
             )}
@@ -855,12 +949,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#08090D',
-    padding: 22,
+    paddingHorizontal: 22,
     paddingTop: 28,
   },
 
   flex: {
     flex: 1,
+    minHeight: 0,
   },
 
   title: {
@@ -881,7 +976,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#151821',
     borderRadius: 14,
     padding: 5,
-    marginBottom: 18,
+    marginBottom: 14,
   },
 
   tab: {
@@ -937,23 +1032,55 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
+  // Category filter container
+  categoryBar: {
+    height: 62,
+    flexShrink: 0,
+    justifyContent: 'center',
+    backgroundColor: '#08090D',
+    zIndex: 20,
+    elevation: 8,
+  },
+
+  categoryScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 58,
+  },
+
   categories: {
-    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 2,
+    paddingVertical: 8,
   },
 
   categoryChip: {
+    minHeight: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#252A37',
-    backgroundColor: '#151821',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginRight: 8,
+    borderColor: '#454D60',
+    backgroundColor: '#202637',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 22,
+    marginRight: 9,
   },
 
   selectedCategory: {
     backgroundColor: '#293F64',
     borderColor: '#4F8CFF',
+  },
+
+  categoryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  selectedCategoryText: {
+    color: '#FFFFFF',
   },
 
   resultCount: {
@@ -966,6 +1093,7 @@ const styles = StyleSheet.create({
   },
 
   tripList: {
+    flex: 1,
     marginTop: 16,
   },
 
@@ -1224,5 +1352,50 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     marginTop: 12,
+  },
+
+  tripCategoryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+    gap: 7,
+  },
+
+  tripCategoryBadge: {
+    backgroundColor: '#243450',
+    borderWidth: 1,
+    borderColor: '#38547D',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+
+  tripCategoryText: {
+    color: '#A9C5FF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  tripSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+    marginBottom: 12,
+  },
+
+  destinationSectionHeader: {
+    marginTop: 20,
+    marginBottom: 12,
+  },
+
+  sectionTitle: {
+    color: '#F7F8FC',
+    fontSize: 19,
+    fontWeight: '800',
+  },
+
+  tripLoader: {
+    marginVertical: 20,
   },
 });

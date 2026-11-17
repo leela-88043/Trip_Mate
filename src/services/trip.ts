@@ -1,3 +1,4 @@
+
 import { supabase } from './supabase';
 import { getTodayKey } from '@/utils/tripTimeline';
 
@@ -6,7 +7,8 @@ export async function createTrip(
   destination: string,
   startDate: string,
   endDate: string,
-  userId: string
+  userId: string,
+  categories: string[] = []
 ) {
   const { data: trip, error: tripError } = await supabase
     .from('trips')
@@ -16,6 +18,7 @@ export async function createTrip(
       start_date: startDate,
       end_date: endDate,
       created_by: userId,
+      categories,
     })
     .select()
     .single();

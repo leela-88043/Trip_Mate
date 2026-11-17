@@ -1,6 +1,8 @@
+
 import {
   Alert,
   Animated,
+  ActivityIndicator,
   Dimensions,
   StyleSheet,
   Text,
@@ -8,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { signOut } from '@/services/auth';
 
@@ -32,6 +34,9 @@ export default function ProfilePanel({
     new Animated.Value(PANEL_WIDTH)
   ).current;
 
+  const [switchingAccount, setSwitchingAccount] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
   useEffect(() => {
     Animated.timing(slideAnim, {
       toValue: visible ? 0 : PANEL_WIDTH,
@@ -40,16 +45,91 @@ export default function ProfilePanel({
     }).start();
   }, [visible, slideAnim]);
 
-  const handleLogout = async () => {
-    const { error } = await signOut();
+  // Switch Account
+  const handleSwitchAccount = () => {
+    if (switchingAccount || loggingOut) return;
 
-    if (error) {
-      Alert.alert('Logout Failed', error.message);
-      return;
-    }
+    Alert.alert(
+      'Switch Account',
+      'You will be signed out of your current account. You can then log in using another account. Continue?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Continue',
+          onPress: async () => {
+            setSwitchingAccount(true);
 
-    onClose();
-    router.replace('/login');
+            try {
+              const { error } = await signOut();
+
+              if (error) {
+                throw error;
+              }
+
+              onClose();
+
+              // Navigate to the existing login screen
+              router.replace('/login');
+            } catch (err) {
+              const message =
+                err instanceof Error
+                  ? err.message
+                  : 'Unable to switch accounts. Please try again.';
+
+              setSwitchingAccount(false);
+
+              Alert.alert('Switch Account Failed', message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Normal Logout
+  const handleLogout = () => {
+    if (switchingAccount || loggingOut) return;
+
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to log out?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            setLoggingOut(true);
+
+            try {
+              const { error } = await signOut();
+
+              if (error) {
+                throw error;
+              }
+
+              onClose();
+              router.replace('/login');
+            } catch (err) {
+              const message =
+                err instanceof Error
+                  ? err.message
+                  : 'Unable to log out. Please try again.';
+
+              setLoggingOut(false);
+
+              Alert.alert('Logout Failed', message);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -67,6 +147,7 @@ export default function ProfilePanel({
         ]}
         activeOpacity={1}
         onPress={onClose}
+        disabled={switchingAccount || loggingOut}
       />
 
       {/* Sliding Panel */}
@@ -91,6 +172,7 @@ export default function ProfilePanel({
           <TouchableOpacity
             style={styles.closeButton}
             onPress={onClose}
+            disabled={switchingAccount || loggingOut}
           >
             <Text style={styles.closeText}>
               ✕
@@ -120,10 +202,11 @@ export default function ProfilePanel({
         {/* My Profile */}
         <TouchableOpacity
           style={styles.option}
+          disabled={switchingAccount || loggingOut}
           onPress={() => {
-  onClose();
-  router.push('/my-profile');
-}}
+            onClose();
+            router.push('/my-profile');
+          }}
         >
           <Text style={styles.optionIcon}>
             👤
@@ -142,27 +225,32 @@ export default function ProfilePanel({
 
         {/* Switch Account */}
         <TouchableOpacity
-          style={styles.option}
-          onPress={() => {
-            Alert.alert(
-              'Switch Account',
-              'Account switching will be added soon.'
-            );
-          }}
+          style={[
+            styles.option,
+            switchingAccount && styles.disabledOption,
+          ]}
+          disabled={switchingAccount || loggingOut}
+          onPress={handleSwitchAccount}
         >
           <Text style={styles.optionIcon}>
             🔄
           </Text>
 
-          <View>
+          <View style={styles.optionContent}>
             <Text style={styles.optionTitle}>
               Switch Account
             </Text>
 
             <Text style={styles.optionSubtitle}>
-              Change to another account
+              {switchingAccount
+                ? 'Switching account...'
+                : 'Change to another account'}
             </Text>
           </View>
+
+          {switchingAccount && (
+            <ActivityIndicator color="#4F8CFF" />
+          )}
         </TouchableOpacity>
 
         <View style={styles.divider} />
@@ -170,6 +258,7 @@ export default function ProfilePanel({
         {/* Login */}
         <TouchableOpacity
           style={styles.option}
+          disabled={switchingAccount || loggingOut}
           onPress={() => {
             onClose();
             router.push('/login');
@@ -185,7 +274,7 @@ export default function ProfilePanel({
             </Text>
 
             <Text style={styles.optionSubtitle}>
-              Login with another account
+              Open the login screen
             </Text>
           </View>
         </TouchableOpacity>
@@ -193,6 +282,7 @@ export default function ProfilePanel({
         {/* Sign Up */}
         <TouchableOpacity
           style={styles.option}
+          disabled={switchingAccount || loggingOut}
           onPress={() => {
             onClose();
             router.push('/signup');
@@ -217,22 +307,32 @@ export default function ProfilePanel({
 
         {/* Logout */}
         <TouchableOpacity
-          style={styles.logoutOption}
+          style={[
+            styles.logoutOption,
+            loggingOut && styles.disabledOption,
+          ]}
+          disabled={switchingAccount || loggingOut}
           onPress={handleLogout}
         >
           <Text style={styles.optionIcon}>
             🚪
           </Text>
 
-          <View>
+          <View style={styles.optionContent}>
             <Text style={styles.logoutTitle}>
               Logout
             </Text>
 
             <Text style={styles.optionSubtitle}>
-              Sign out of this account
+              {loggingOut
+                ? 'Logging out...'
+                : 'Sign out of this account'}
             </Text>
           </View>
+
+          {loggingOut && (
+            <ActivityIndicator color="#FF7B86" />
+          )}
         </TouchableOpacity>
       </Animated.View>
     </View>
@@ -346,6 +446,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
 
+  optionContent: {
+    flex: 1,
+  },
+
+  disabledOption: {
+    opacity: 0.6,
+  },
+
   optionIcon: {
     fontSize: 22,
     width: 42,
@@ -377,4 +485,3 @@ const styles = StyleSheet.create({
     color: '#FF7B86',
   },
 });
-
